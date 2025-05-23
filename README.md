@@ -1,7 +1,8 @@
 # 2025-project-roost-evaluation
 # Steps for running HMA with CLIP extensions
 
-The hma demo repo is at https://github.com/UMass-Rescue/2025-project-hma-clip-demo
+The hma demo repo is at https://github.com/UMass-Rescue/2025-project-hma-clip-demo.
+
 To get the HMA up and running, follow these steps:
 
 ### Prerequisites

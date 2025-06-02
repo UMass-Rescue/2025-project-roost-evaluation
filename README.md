@@ -29,3 +29,19 @@ Use Docker Compose to build and start the services defined in the `docker-compos
 This command builds the Docker image and starts the services defined, including the application and the database.
 
 You can set the postgres db and other env variables for hma-demo in docker-compose.yaml and omm_config.py
+
+
+### Instructions to run evaluation pipeline
+
+Before running hma, you need to change it to use an external network 
+1) create a docker network called shared-hma-network by running below command
+docker network create shared-hma-network
+
+2) change the networks in docker compose to these lines 
+networks:
+  shared-hma-network:
+    external: true
+
+under services: also change network to shared-hma-network
+
+3) Make sure hma is running and then run evaluation using command docker-compose up

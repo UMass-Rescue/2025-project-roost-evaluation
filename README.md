@@ -32,8 +32,10 @@ You can set the postgres db and other env variables for hma-demo in docker-compo
 
 
 ### Instructions to run evaluation pipeline
+Ensure in the dockerfile of hma, the latest version of hma is pulled. If not, change line 1 in Dockerfile to FROM ghcr.io/facebook/threatexchange/hma:1.0.17 or hma:latest tag.
 
 Before running hma, you need to change it to use an external network 
+
 1) create a docker network called shared-hma-network by running below command
 docker network create shared-hma-network
 

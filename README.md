@@ -35,7 +35,7 @@ To get HMA CLIP up and running, follow these steps:
 
 ## Instructions to Run the Evaluation Pipeline
 
-1. **Ensure the Latest HMA CLIP Version**
+1. **Ensure the Latest HMA Version**
 
    In the Dockerfile of HMA CLIP, ensure the latest version of HMA is pulled. If not, update line 1 in the Dockerfile to:
 

@@ -73,7 +73,8 @@ To get HMA CLIP up and running, follow these steps:
    ports:
       - 5005:5000  
    ```
-   - This forwards the requests on port 5005 on your machine to port 5000 on docker.
+
+   - This forwards the requests on port 5005 on your machine to port 5000 on docker. You also need to change the hma_app_url variable to use port 5005 in evaluate.py of roost-evaluation project.
 
 4. **Run the Evaluation**
 

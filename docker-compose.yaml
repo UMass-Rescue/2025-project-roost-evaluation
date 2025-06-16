@@ -1,0 +1,13 @@
+version: '3.8'
+
+services:
+  evaluation:
+    build: .
+#    command: tail -f /dev/null
+    networks:
+      - shared-hma-network
+  
+# hma needs to be on same docker network 
+networks:
+  shared-hma-network:
+    external: true

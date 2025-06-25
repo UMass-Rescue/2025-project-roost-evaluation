@@ -7,7 +7,7 @@ import time
 from pathlib import Path
 
 image_input_dir = Path("./resources/images")
-hma_app_url = "http://host.docker.internal:5005"
+hma_app_url = "http://host.docker.internal:5000"
 hash_url = hma_app_url +  "/h/hash"  
 match_url = hma_app_url + "/m/lookup"
 

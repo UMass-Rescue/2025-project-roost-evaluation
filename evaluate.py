@@ -3,6 +3,7 @@ import random
 import requests
 from requests import RequestException
 import json
+import time
 from pathlib import Path
 
 image_input_dir = Path("./resources/images")
@@ -129,30 +130,56 @@ class Evaluator:
             print(f"Request exception: {str(e)}")  # Debug log
             return {'status': 'failure', 'error': str(e)}
 
+    def get_index_size(self, SIGNAL_TYPE:  str) -> int:
+        resp = requests.get(f"{hma_app_url}/m/index/status", params={"signal_type": SIGNAL_TYPE})
+        index_size = resp.json().get(SIGNAL_TYPE, {}).get("size", 0)
+        return index_size
 
+    def setup_bank(self, bank_name):
+        """Ensure the bank exists, create if not."""
+        if not self.bank_exists(bank_name):
+            if not self.create_bank(bank_name):
+                print(f"Failed to create bank {bank_name}. Exiting.")
+                return False
+        return True
 
-    
+    def upload_files_to_bank(self, files_to_send, bank_name):
+        """Upload files to the specified bank."""
+        for file_path in files_to_send:
+            result = self.add_file_to_hma_bank(file_path, bank_name)
+            print(result['response'])
+
+    def wait_for_index_update(self, expected_size, signal_type="pdq"):
+        """Wait until the index size reaches the expected value."""
+        while True:
+            current_size = self.get_index_size(signal_type)
+            print(f"Current index size: {current_size}")
+            if current_size >= expected_size:
+                print("Index is up-to-date!")
+                break
+            time.sleep(5)
+
+    def match_uploaded_files(self, files_to_send):
+        """Match each uploaded file and print the response."""
+        print("[INFO]: Sleeping 35 seconds to allow in-memory index cache to refresh...")
+        time.sleep(35)
+        for match_file_path in files_to_send:
+            print(match_file_path)
+            match_resp = self.match_local_content(match_file_path)
+            print(json.dumps(match_resp, indent=2))
+
 def main():
     evaluator = Evaluator()
-    # Bank names should be upper case with underscore
     BANK_NAME = "TEST_BANK_DATA"
-
-    # Check and create the bank once
-    if not evaluator.bank_exists(BANK_NAME):
-        if not evaluator.create_bank(BANK_NAME):
-            print(f"Failed to create bank {BANK_NAME}. Exiting.")
-            return
+    if not evaluator.setup_bank(BANK_NAME):
+        return
 
     files_to_send = [str(file) for file in image_input_dir.iterdir() if file.is_file()]
-
-    for file_path in files_to_send:
-        result = evaluator.add_file_to_hma_bank(file_path, BANK_NAME)
-        print(result['response'])
-
-    for match_file_path in files_to_send:
-        print(match_file_path)
-        match_resp = evaluator.match_local_content(match_file_path)
-        print(json.dumps(match_resp, indent=2))
+    index_size_before = evaluator.get_index_size("pdq")
+    evaluator.upload_files_to_bank(files_to_send, BANK_NAME)
+    expected_size = index_size_before + len(files_to_send)
+    evaluator.wait_for_index_update(expected_size, "pdq")
+    evaluator.match_uploaded_files(files_to_send)
 
 
 if __name__ == '__main__':

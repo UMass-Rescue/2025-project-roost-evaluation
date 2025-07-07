@@ -99,7 +99,7 @@ class Evaluator:
 
     def match_local_content(self, file_path: str) -> dict:
         hasher_resp = self.hash_local_content(file_path)
-        signal_type = 'pdq'
+        signal_type = 'clip'
         signal = hasher_resp[signal_type]
         params = {
             'signal_type': signal_type,
@@ -149,7 +149,7 @@ class Evaluator:
             result = self.add_file_to_hma_bank(file_path, bank_name)
             print(result['response'])
 
-    def wait_for_index_update(self, expected_size, signal_type="pdq"):
+    def wait_for_index_update(self, expected_size, signal_type="clip"):
         """Wait until the index size reaches the expected value."""
         while True:
             current_size = self.get_index_size(signal_type)
@@ -175,10 +175,10 @@ def main():
         return
 
     files_to_send = [str(file) for file in image_input_dir.iterdir() if file.is_file()]
-    index_size_before = evaluator.get_index_size("pdq")
+    index_size_before = evaluator.get_index_size("clip")
     evaluator.upload_files_to_bank(files_to_send, BANK_NAME)
     expected_size = index_size_before + len(files_to_send)
-    evaluator.wait_for_index_update(expected_size, "pdq")
+    evaluator.wait_for_index_update(expected_size, "clip")
     evaluator.match_uploaded_files(files_to_send)
 
 

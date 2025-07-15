@@ -5,9 +5,10 @@ from requests import RequestException
 import json
 import time
 from pathlib import Path
+import subprocess
 
 image_input_dir = Path("./resources/images")
-hma_app_url = "http://host.docker.internal:5000"
+hma_app_url = "http://host.docker.internal:5005"
 hash_url = hma_app_url +  "/h/hash"  
 match_url = hma_app_url + "/m/lookup"
 
@@ -168,18 +169,29 @@ class Evaluator:
             match_resp = self.match_local_content(match_file_path)
             print(json.dumps(match_resp, indent=2))
 
-def main():
-    evaluator = Evaluator()
-    BANK_NAME = "TEST_BANK_DATA"
-    if not evaluator.setup_bank(BANK_NAME):
-        return
+def run_all_tests():
+    test_dir = os.path.join(os.path.dirname(__file__), "tests")
+    for fname in os.listdir(test_dir):
+        if fname.endswith("_test.py"):
+            print(f"Running {fname} ...")
+            subprocess.run(["python", os.path.join(test_dir, fname)], check=True)
 
-    files_to_send = [str(file) for file in image_input_dir.iterdir() if file.is_file()]
-    index_size_before = evaluator.get_index_size("clip")
-    evaluator.upload_files_to_bank(files_to_send, BANK_NAME)
-    expected_size = index_size_before + len(files_to_send)
-    evaluator.wait_for_index_update(expected_size, "clip")
-    evaluator.match_uploaded_files(files_to_send)
+def main():
+    eval_mode = os.environ.get("EVAL_MODE", "smoke")
+    if eval_mode == "smoke":
+        evaluator = Evaluator()
+        BANK_NAME = "TEST_BANK_DATA"
+        if not evaluator.setup_bank(BANK_NAME):
+            return
+
+        files_to_send = [str(file) for file in image_input_dir.iterdir() if file.is_file()]
+        index_size_before = evaluator.get_index_size("clip")
+        evaluator.upload_files_to_bank(files_to_send, BANK_NAME)
+        expected_size = index_size_before + len(files_to_send)
+        evaluator.wait_for_index_update(expected_size, "clip")
+        evaluator.match_uploaded_files(files_to_send)
+    else:
+        run_all_tests()
 
 
 if __name__ == '__main__':

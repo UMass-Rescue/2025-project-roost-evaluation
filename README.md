@@ -47,36 +47,15 @@ To get HMA CLIP up and running, follow these steps:
 
 2. **Use an External Network**
 
-   Before running HMA CLIP, configure it to use an external network:
+   Before running HMA CLIP, create the shared network:
 
-   - Create a Docker network called `shared-hma-network` by running the following command:
+   - Create a Docker network called `shared-hma-network` by running the following command on your terminal:
 
      ```bash
      docker network create shared-hma-network
      ```
 
-   - Update the `networks` section in `docker-compose.yml` to:
-
-     ```yaml
-     networks:
-       shared-hma-network:
-         external: true
-     ```
-
-   - Under the `services` section, ensure the network is set to `shared-hma-network`.
-
-3. **Check the port for HMA-CLIP**
-   
-   In macOS, 5000 port could be a reserved port. So, update the ports column under  `services`: `app` in `docker-compose.yml` of HMA CLIP to:
-
-   ```yaml
-   ports:
-      - 5005:5000  
-   ```
-
-   - This forwards the requests on port 5005 on your machine to port 5000 on docker. You also need to change the hma_app_url variable to use port 5005 in evaluate.py of roost-evaluation project.
-
-4. **Run the Evaluation**
+3. **Run the Evaluation**
 
    Ensure HMA CLIP is running, then execute the evaluation pipeline using the following command:
 

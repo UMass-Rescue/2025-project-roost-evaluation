@@ -1,6 +1,6 @@
 import os
 from pathlib import Path
-from evaluate import Evaluator, image_input_dir
+from evaluate import image_input_dir
 import json
 
 def get_image_files(image_dir=None):

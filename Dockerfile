@@ -12,5 +12,6 @@ RUN pip install requests
 
 # Set default image directory, can be overridden at runtime
 ENV IMAGE_INPUT_DIR=/build/resources/images
+ENV PYTHONPATH=/build
 
 CMD ["python", "evaluate.py"]

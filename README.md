@@ -83,3 +83,30 @@ To get HMA CLIP up and running, follow these steps:
    ```bash
    docker-compose up --build
    ```
+
+---
+
+## Running Tests and Retrieving Results
+
+To run the test suite (including pairwise_test.py) and retrieve the results file (pairwise_results.json) to your host machine, follow these steps:
+
+1. **Build the Docker image (if not already built):**
+
+   ```bash
+   docker build -t roost-eval .
+   ```
+
+2. **Run the tests and save results to your host:**
+
+   ```bash
+   docker run --rm -e EVAL_MODE=test -v "$PWD:/build" roost-eval
+   ```
+
+   - The `-e EVAL_MODE=test` environment variable tells the container to run all tests.
+   - The `-v "$PWD:/build"` flag mounts your current directory to `/build` in the container, so any files written to `/build` (such as `pairwise_results.json`) will appear in your project directory on your host.
+
+3. **Find the results:**
+
+   After the container finishes, you will find `pairwise_results.json` in your project root directory.
+
+---

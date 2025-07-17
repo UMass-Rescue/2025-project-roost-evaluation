@@ -1,5 +1,4 @@
 import os
-import random
 import requests
 from requests import RequestException
 import json

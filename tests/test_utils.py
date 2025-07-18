@@ -17,6 +17,10 @@ def match_image(evaluator, image_path):
     """Return the match result dict for a given image file using the Evaluator."""
     return evaluator.match_local_content(image_path)
 
+def match_image_with_threshold(evaluator, image_path, threshold):
+    """Return the match result dict for a given image file using the Evaluator, with a threshold."""
+    return evaluator.match_local_content_with_threshold(image_path, threshold)
+
 def write_results(results, filename):
     """Write results (list of dicts) to a JSON file."""
     with open(filename, 'w') as f:

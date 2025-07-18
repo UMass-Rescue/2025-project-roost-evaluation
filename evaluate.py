@@ -12,6 +12,10 @@ hma_app_url = "http://host.docker.internal:5005"
 hash_url = hma_app_url +  "/h/hash"  
 match_url = hma_app_url + "/m/lookup"
 
+# Test parameters (can be overridden by environment variables)
+DEFAULT_THRESHOLD = float(os.environ.get("EVAL_THRESHOLD", 0.2))
+DEFAULT_TOPK = int(os.environ.get("EVAL_TOPK", 5))
+
 class Evaluator:
     def bank_exists(self,bank_name: str) -> bool:
         """Check if a bank exists by making API call to HMA."""
@@ -131,6 +135,15 @@ class Evaluator:
             print(f"Request exception: {str(e)}")  # Debug log
             return {'status': 'failure', 'error': str(e)}
 
+    def match_local_content_with_threshold(self, file_path: str, threshold) -> dict:
+        """Call match_local_content and filter matches by distance <= threshold."""
+        result = self.match_local_content(file_path)
+        if result['status'] == 'success' and 'matches' in result:
+            filtered_matches = [m for m in result['matches'] if m.get('distance', float('inf')) <= threshold]
+            result['matches'] = filtered_matches
+            result['threshold'] = threshold
+        return result
+
     def get_index_size(self, SIGNAL_TYPE:  str) -> int:
         resp = requests.get(f"{hma_app_url}/m/index/status", params={"signal_type": SIGNAL_TYPE})
         index_size = resp.json().get(SIGNAL_TYPE, {}).get("size", 0)
@@ -170,6 +183,10 @@ class Evaluator:
             print(json.dumps(match_resp, indent=2))
 
 def run_all_tests():
+    evaluator = Evaluator()
+    image_files = [str(file) for file in image_input_dir.iterdir() if file.is_file()]
+    threshold = DEFAULT_THRESHOLD
+    k = DEFAULT_TOPK
     test_dir = os.path.join(os.path.dirname(__file__), "tests")
     for fname in os.listdir(test_dir):
         if fname.endswith("_test.py"):

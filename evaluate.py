@@ -135,15 +135,6 @@ class Evaluator:
             print(f"Request exception: {str(e)}")  # Debug log
             return {'status': 'failure', 'error': str(e)}
 
-    def match_local_content_with_threshold(self, file_path: str, threshold) -> dict:
-        """Call match_local_content and filter matches by distance <= threshold."""
-        result = self.match_local_content(file_path)
-        if result['status'] == 'success' and 'matches' in result:
-            filtered_matches = [m for m in result['matches'] if m.get('distance', float('inf')) <= threshold]
-            result['matches'] = filtered_matches
-            result['threshold'] = threshold
-        return result
-
     def get_index_size(self, SIGNAL_TYPE:  str) -> int:
         resp = requests.get(f"{hma_app_url}/m/index/status", params={"signal_type": SIGNAL_TYPE})
         index_size = resp.json().get(SIGNAL_TYPE, {}).get("size", 0)

@@ -4,6 +4,9 @@ services:
   evaluation:
     build: .
 #    command: tail -f /dev/null
+    environment:
+      - EVAL_MODE=test
+      - PYTHONPATH=/build
     networks:
       - shared-hma-network
   

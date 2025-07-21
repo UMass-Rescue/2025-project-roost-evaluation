@@ -12,10 +12,6 @@ hma_app_url = "http://host.docker.internal:5005"
 hash_url = hma_app_url +  "/h/hash"  
 match_url = hma_app_url + "/m/lookup"
 
-# Test parameters (can be overridden by environment variables)
-DEFAULT_THRESHOLD = float(os.environ.get("EVAL_THRESHOLD", 0.2))
-DEFAULT_TOPK = int(os.environ.get("EVAL_TOPK", 5))
-
 class Evaluator:
     def bank_exists(self,bank_name: str) -> bool:
         """Check if a bank exists by making API call to HMA."""
@@ -174,14 +170,10 @@ class Evaluator:
             print(json.dumps(match_resp, indent=2))
 
 def run_all_tests():
-    evaluator = Evaluator()
-    image_files = [str(file) for file in image_input_dir.iterdir() if file.is_file()]
-    threshold = DEFAULT_THRESHOLD
-    k = DEFAULT_TOPK
     test_dir = os.path.join(os.path.dirname(__file__), "tests")
-    for fname in os.listdir(test_dir):
+    for fname in sorted(os.listdir(test_dir)):
         if fname.endswith("_test.py"):
-            print(f"Running {fname} ...")
+            print(f"Running {fname} ...", flush=True)
             subprocess.run(["python", os.path.join(test_dir, fname)], check=True)
 
 def main():

@@ -61,4 +61,4 @@ coverage.xml
 .DS_Store
 
 # Results and output files
-pairwise_results.json 
+pairwise_clip_compare.json 

@@ -19,7 +19,7 @@ def match_image(evaluator, image_path):
     """Return the match result dict for a given image file using the Evaluator."""
     return evaluator.match_local_content(image_path)
 
-def _extract_matches(matches):
+def extract_matches(matches):
     """Helper function to extract and format matches from HMA API response."""
     processed_matches = []
     
@@ -44,34 +44,12 @@ def _extract_matches(matches):
     
     return processed_matches
 
-def process_matches_threshold(matches, threshold):
-    """Process matches and apply threshold filtering."""
-    processed_matches = _extract_matches(matches)
-    
-    # Filter by threshold and sort by distance
-    filtered_matches = [match for match in processed_matches if match.get('distance', float('inf')) <= threshold]
-    return sorted(filtered_matches, key=lambda m: m.get('distance', float('inf')))
-
-def process_matches_topk(matches, k):
-    """Process matches and apply top-k filtering."""
-    processed_matches = _extract_matches(matches)
-    
-    # Sort by distance and take top k
-    sorted_matches = sorted(processed_matches, key=lambda m: m.get('distance', float('inf')))
-    return sorted_matches[:k]
-
 def create_result(img, clip_hash, processed_matches, **kwargs):
     """Create a standardized result object."""
     result = {
         'image': os.path.basename(img),
         'clip_hash': clip_hash,
     }
-    
-    # Add threshold and top_k after clip_hash if they exist
-    if 'threshold' in kwargs:
-        result['threshold'] = kwargs.pop('threshold')
-    if 'top_k' in kwargs:
-        result['top_k'] = kwargs.pop('top_k')
     
     result['matches'] = processed_matches
     
@@ -112,3 +90,26 @@ def decode_clip_hex_to_floats(hex_str: str) -> list[float]:
     decoded = np.frombuffer(byte_data, dtype=np.float32).tolist()
     print(f"[DEBUG] Decoded CLIP vector length: {len(decoded)}")
     return decoded
+
+def process_image(evaluator, img, process_function, **kwargs):
+    try:
+        match_result = match_image(evaluator, img)
+        clip_hash = match_result.get('signal', '') if match_result.get('status') == 'success' else ''
+
+        if match_result.get('status') == 'success' and 'matches' in match_result:
+            matches = match_result['matches']
+            processed_matches = process_function(matches, **kwargs)
+
+            for match in processed_matches:
+                if match.get('content_id'):
+                    content_id = match['content_id']
+                    content_result = evaluator.get_signal_from_contentid(content_id, "TEST_BANK_DATA")
+                    match['clip_hash'] = content_result.get('data', {}).get('signals', {}).get('clip', '') if content_result.get('status') == 'success' else ''
+
+            return create_result(img, clip_hash, processed_matches, **kwargs)
+        else:
+            return create_result(img, clip_hash, [], error=match_result.get('error', 'No matches found'), **kwargs)
+
+    except Exception as e:
+        print(f"[WARN] Failed to process {img}: {e}")
+        return create_result(img, '', [], error=str(e), **kwargs)

@@ -105,8 +105,20 @@ To run the test suite (including pairwise_test.py) and retrieve the results file
    - The `-e EVAL_MODE=test` environment variable tells the container to run all tests.
    - The `-v "$PWD:/build"` flag mounts your current directory to `/build` in the container, so any files written to `/build` (such as `pairwise_results.json`) will appear in your project directory on your host.
 
+   To run specific tests with parameters:
+
+   - **Top-k Test:**
+
+     ```bash
+     docker run --rm -e EVAL_MODE=test -e EVAL_TOPK=10 -v "$PWD:/build" roost-eval python tests/topk_test.py
+     ```
+
+   - **Threshold Test:**
+
+     ```bash
+     docker run --rm -e EVAL_MODE=test -e EVAL_THRESHOLD=0.15 -v "$PWD:/build" roost-eval python tests/threshold_test.py
+     ```
+
 3. **Find the results:**
 
    After the container finishes, you will find `pairwise_results.json` in your project root directory.
-
----

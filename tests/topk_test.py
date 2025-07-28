@@ -1,10 +1,18 @@
 import os
 import json
-from test_utils import get_image_files, write_results, process_matches_topk, create_result, match_image
+from test_utils import get_image_files, write_results, create_result, match_image, process_image, extract_matches
 from evaluate import Evaluator
 
 # Test parameter (can be overridden by environment variable)
 DEFAULT_TOPK = int(os.environ.get("EVAL_TOPK", 5))
+
+def process_matches_topk(matches, k):
+    """Process matches and apply top-k filtering."""
+    processed_matches = extract_matches(matches)
+    
+    # Sort by distance and take top k
+    sorted_matches = sorted(processed_matches, key=lambda m: m.get('distance', float('inf')))
+    return sorted_matches[:k]
 
 def main():
     evaluator = Evaluator()
@@ -13,42 +21,7 @@ def main():
     k = DEFAULT_TOPK
 
     for img in image_files:
-        try:
-            match_result = match_image(evaluator, img)
-            
-            # Extract clip hash from match result
-            clip_hash = match_result.get('signal', '') if match_result.get('status') == 'success' else ''
-            
-            if match_result.get('status') == 'success' and 'matches' in match_result:
-                matches = match_result['matches']
-                processed_matches = process_matches_topk(matches, k)
-                
-                # Get clip hashes for each match
-                for match in processed_matches:
-                    if match.get('content_id'):
-                        content_id = match['content_id']
-                        content_result = evaluator.get_signal_from_contentid(content_id, "TEST_BANK_DATA")
-                        if content_result.get('status') == 'success':
-                            match['clip_hash'] = content_result.get('data', {}).get('signals', {}).get('clip', '')
-                        else:
-                            match['clip_hash'] = ''
-                
-                result = create_result(img, clip_hash, processed_matches, top_k=k)
-            else:
-                result = create_result(
-                    img, clip_hash, [], 
-                    top_k=k, 
-                    error=match_result.get('error', 'No matches found')
-                )
-                
-        except Exception as e:
-            print(f"[WARN] Failed to process {img}: {e}")
-            result = create_result(
-                img, '', [], 
-                top_k=k, 
-                error=str(e)
-            )
-            
+        result = process_image(evaluator, img, process_matches_topk, k=k)
         results.append(result)
         print(json.dumps(result, indent=2))
 
@@ -56,4 +29,4 @@ def main():
     print(f"\n[INFO] Top-k test complete. Results saved to topk_results_{k}.json")
 
 if __name__ == "__main__":
-    main() 
+    main()

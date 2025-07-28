@@ -208,6 +208,27 @@ class Evaluator:
         except RequestException as e:
             return {"status": "failure", "error": str(e)}
 
+    def get_signal_from_contentid(self, content_id, bank_name, include_signals=True):
+        """Get signal from content ID via HMA API."""
+        params = {"include_signals": "true"} if include_signals else {}
+        try:
+            response = requests.get(f"{hma_app_url}/c/bank/{bank_name}/content/{content_id}", params=params)
+            if response.ok:
+                return {
+                    "status": "success",
+                    "data": response.json()
+                }
+            else:
+                print(f"Failed to get content {content_id}: {response.status_code} - {response.text}")
+                return {
+                    "status": "failure",
+                    "error": response.text,
+                    "code": response.status_code
+                }
+        except RequestException as e:
+            print(f"Request exception while getting content {content_id}: {str(e)}")
+            return {"status": "failure", "error": str(e)}
+
 def run_all_tests():
     test_dir = os.path.join(os.path.dirname(__file__), "tests")
     for fname in sorted(os.listdir(test_dir)):

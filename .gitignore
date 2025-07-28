@@ -62,3 +62,5 @@ coverage.xml
 
 # Results and output files
 pairwise_clip_compare.json 
+threshold_results_*.json
+topk_results_*.json

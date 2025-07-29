@@ -78,6 +78,8 @@ To get HMA CLIP up and running, follow these steps:
 
 4. **Run the Evaluation**
 
+   HMA's /compare endpoint currently has a bug which results in a JSON error while parsing the clip signal result. As a workaround, change the Dockerfile in HMA clip demo UMass fork to clone the `debug-logging` branch of HMA UMass fork which has a temporary fix for this problem.  
+   
    Ensure HMA CLIP is running, then execute the evaluation pipeline using the following command:
 
    ```bash
@@ -88,7 +90,7 @@ To get HMA CLIP up and running, follow these steps:
 
 ## Running Tests and Retrieving Results
 
-To run the test suite (including pairwise_test.py) and retrieve the results file (pairwise_results.json) to your host machine, follow these steps:
+To run the test suite (including pairwise_test.py) and retrieve the results file (pairwise_clip_compare.json) to your host machine, follow these steps:
 
 1. **Build the Docker image (if not already built):**
 

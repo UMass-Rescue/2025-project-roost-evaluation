@@ -37,8 +37,8 @@ def main():
         distance = None
         if compare_resp.get("status") == "success":
             try:
-                distance = float(compare_resp["result"].get("distance", None))
-                matched = distance is not None
+                distance = compare_resp["result"]["distance"].get("distance", None)
+                matched = compare_resp["result"].get("match", None)
             except (ValueError, TypeError):
                 pass
         else:

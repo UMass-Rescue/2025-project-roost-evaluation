@@ -80,6 +80,8 @@ To get HMA CLIP up and running, follow these steps:
 
    Ensure HMA CLIP is running, then execute the evaluation pipeline using the following command:
 
+   To run threshold and topk tests, use get-signal-from-contentid branch of HMA CLIP demo. This uses the appropriate branches of tx-extension-clip and threatexchange repos.
+
    ```bash
    docker-compose up --build
    ```

@@ -112,3 +112,55 @@ To run the test suite (including pairwise_test.py) and retrieve the results file
    After the container finishes, you will find `pairwise_results.json` in your project root directory.
 
 ---
+
+## Runtime Configuration Variables
+
+The evaluation pipeline supports several environment variables for customization:
+
+### HMA API Configuration
+
+- **`HMA_APP_URL`**: Base URL for the HMA API endpoints
+  - Default: `http://host.docker.internal:5005`
+  - Used in: `evaluate.py`, `tests/cleanup_banks.py`
+  - Example: `docker run --rm -e HMA_APP_URL=http://localhost:5005 -e EVAL_MODE=test -v "$PWD:/build" roost-eval`
+
+### Test Configuration
+
+- **`EVAL_MODE`**: Controls the evaluation mode
+  - Default: `smoke` (runs smoke test)
+  - Options: `smoke`, `test` (runs all tests)
+  - Used in: `evaluate.py`
+
+- **`OUTPUT_FILE`**: Specifies the output filename for test results
+  - Default: `pairwise_clip_compare.json`
+  - Used in: `tests/pairwise_test.py`
+  - Example: `docker run --rm -e OUTPUT_FILE=my_results.json -e EVAL_MODE=test -v "$PWD:/build" roost-eval`
+
+### Bank Management
+
+- **`BANK_NAME`**: Name of the HMA bank to use for testing
+  - Default: `TEST_BANK_DATA`
+  - Used in: `evaluate.py`
+  - Example: `docker run --rm -e BANK_NAME=MY_TEST_BANK -e EVAL_MODE=smoke -v "$PWD:/build" roost-eval`
+
+### Input Configuration
+
+- **`IMAGE_INPUT_DIR`**: Directory containing images for processing
+  - Default: `./resources/images` (relative to project root)
+  - Used in: `tests/test_utils.py`
+  - Example: `docker run --rm -e IMAGE_INPUT_DIR=/custom/images -e EVAL_MODE=test -v "$PWD:/build" roost-eval`
+
+### Example with Multiple Custom Configuration
+
+```bash
+docker run --rm \
+  -e EVAL_MODE=test \
+  -e OUTPUT_FILE=custom_results.json \
+  -e BANK_NAME=CUSTOM_BANK \
+  -e HMA_APP_URL=http://localhost:5005 \
+  -e IMAGE_INPUT_DIR=/custom/images \
+  -v "$PWD:/build" \
+  roost-eval
+```
+
+---

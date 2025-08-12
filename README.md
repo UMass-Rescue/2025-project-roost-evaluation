@@ -10,7 +10,7 @@ To get HMA CLIP up and running, follow these steps:
 
 - Docker and Docker Compose must be installed on your machine.
 
-### Setup and Run
+### Setup
 
 1. **Clone the Repository**
 
@@ -76,15 +76,6 @@ To get HMA CLIP up and running, follow these steps:
 
    - This forwards the requests on port 5005 on your machine to port 5000 on docker. You also need to change the hma_app_url variable to use port 5005 in evaluate.py of roost-evaluation project.
 
-4. **Run the Evaluation**
-
-   HMA's /compare endpoint currently has a bug which results in a JSON error while parsing the clip signal result. As a workaround, change the Dockerfile in HMA clip demo UMass fork to clone the `debug-logging` branch of HMA UMass fork which has a temporary fix for this problem.  
-   
-   Ensure HMA CLIP is running, then execute the evaluation pipeline using the following command:
-
-   ```bash
-   docker-compose up --build
-   ```
 
 ---
 

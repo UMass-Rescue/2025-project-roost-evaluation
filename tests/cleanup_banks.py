@@ -1,6 +1,7 @@
 import requests
+import os
 
-HMA_API_URL = "http://localhost:5005"
+HMA_API_URL = os.getenv("HMA_APP_URL", "http://host.docker.internal:5005")
 BANKS_ENDPOINT = f"{HMA_API_URL}/c/banks"
 BANK_DELETE_ENDPOINT = f"{HMA_API_URL}/c/bank"
 

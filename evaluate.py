@@ -7,7 +7,7 @@ from pathlib import Path
 import subprocess
 
 image_input_dir = Path("./resources/images")
-hma_app_url = "http://host.docker.internal:5005"
+hma_app_url = os.getenv("HMA_APP_URL", "http://host.docker.internal:5005")
 hash_url = hma_app_url +  "/h/hash"  
 match_url = hma_app_url + "/m/lookup"
 
@@ -219,7 +219,7 @@ def main():
     eval_mode = os.environ.get("EVAL_MODE", "smoke")
     if eval_mode == "smoke":
         evaluator = Evaluator()
-        BANK_NAME = "TEST_BANK_DATA"
+        BANK_NAME = os.getenv("BANK_NAME", "TEST_BANK_DATA")
         if not evaluator.setup_bank(BANK_NAME):
             return
 

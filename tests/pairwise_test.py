@@ -1,9 +1,10 @@
+import os
 import itertools
 import json
 from test_utils import get_image_files, hash_image, write_results, decode_clip_hex_to_floats
 from evaluate import Evaluator
 
-OUTPUT_FILE = "pairwise_clip_compare.json"
+OUTPUT_FILE = os.getenv("OUTPUT_FILE", "pairwise_clip_compare.json")
 SIGNAL_TYPE = "clip"
 
 def main():

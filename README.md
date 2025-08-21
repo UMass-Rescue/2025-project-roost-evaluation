@@ -110,10 +110,15 @@ The evaluation pipeline supports several environment variables for customization
 
 ### HMA API Configuration
 
-- **`HMA_APP_URL`**: Base URL for the HMA API endpoints
-  - Default: `http://host.docker.internal:5005`
+- **`HMA_HOST`**: Hostname for the HMA API server
+  - Default: `host.docker.internal`
   - Used in: `evaluate.py`, `tests/cleanup_banks.py`
-  - Example: `docker run --rm -e HMA_APP_URL=http://localhost:5005 -e EVAL_MODE=test -v "$PWD:/build" roost-eval`
+  - Example: `docker run --rm -e HMA_HOST=localhost -e EVAL_MODE=test -v "$PWD:/build" roost-eval`
+
+- **`HMA_PORT`**: Port number for the HMA API server
+  - Default: `5005`
+  - Used in: `evaluate.py`, `tests/cleanup_banks.py`
+  - Example: `docker run --rm -e HMA_PORT=5000 -e EVAL_MODE=test -v "$PWD:/build" roost-eval`
 
 ### Test Configuration
 
@@ -148,10 +153,9 @@ docker run --rm \
   -e EVAL_MODE=test \
   -e OUTPUT_FILE=custom_results.json \
   -e BANK_NAME=CUSTOM_BANK \
-  -e HMA_APP_URL=http://localhost:5005 \
+  -e HMA_HOST=localhost \
+  -e HMA_PORT=5000 \
   -e IMAGE_INPUT_DIR=/custom/images \
   -v "$PWD:/build" \
   roost-eval
 ```
-
----

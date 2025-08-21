@@ -1,7 +1,9 @@
 import requests
 import os
 
-HMA_API_URL = os.getenv("HMA_APP_URL", "http://host.docker.internal:5005")
+hma_host = os.getenv("HMA_HOST", "host.docker.internal")
+hma_port = os.getenv("HMA_PORT", "5005")
+HMA_API_URL = f"http://{hma_host}:{hma_port}"
 BANKS_ENDPOINT = f"{HMA_API_URL}/c/banks"
 BANK_DELETE_ENDPOINT = f"{HMA_API_URL}/c/bank"
 

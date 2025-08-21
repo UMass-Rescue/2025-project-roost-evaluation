@@ -7,7 +7,9 @@ from pathlib import Path
 import subprocess
 
 image_input_dir = Path("./resources/images")
-hma_app_url = os.getenv("HMA_APP_URL", "http://host.docker.internal:5005")
+hma_host = os.getenv("HMA_HOST", "host.docker.internal")
+hma_port = os.getenv("HMA_PORT", "5005")
+hma_app_url = f"http://{hma_host}:{hma_port}"
 hash_url = hma_app_url +  "/h/hash"  
 match_url = hma_app_url + "/m/lookup"
 

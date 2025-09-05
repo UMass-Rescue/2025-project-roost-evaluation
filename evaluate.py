@@ -1,13 +1,15 @@
 import os
-import random
 import requests
 from requests import RequestException
 import json
 import time
 from pathlib import Path
+import subprocess
 
 image_input_dir = Path("./resources/images")
-hma_app_url = "http://host.docker.internal:5000"
+hma_host = os.getenv("HMA_HOST", "host.docker.internal")
+hma_port = os.getenv("HMA_PORT", "5005")
+hma_app_url = f"http://{hma_host}:{hma_port}"
 hash_url = hma_app_url +  "/h/hash"  
 match_url = hma_app_url + "/m/lookup"
 
@@ -143,21 +145,38 @@ class Evaluator:
                 return False
         return True
 
+    def delete_bank(self, bank_name):
+        """Delete a bank from HMA."""
+        try:
+            response = requests.delete(f"{hma_app_url}/c/bank/{bank_name}")
+            if response.ok:
+                print(f"[INFO] Deleted bank {bank_name}")
+                return True
+            else:
+                print(f"[WARN] Failed to delete bank {bank_name}: {response.status_code} - {response.text}")
+                return False
+        except RequestException as e:
+            print(f"[ERROR] Request exception while deleting bank: {str(e)}")
+            return False
+
     def upload_files_to_bank(self, files_to_send, bank_name):
         """Upload files to the specified bank."""
         for file_path in files_to_send:
             result = self.add_file_to_hma_bank(file_path, bank_name)
             print(result['response'])
 
-    def wait_for_index_update(self, expected_size, signal_type="clip"):
-        """Wait until the index size reaches the expected value."""
-        while True:
-            current_size = self.get_index_size(signal_type)
-            print(f"Current index size: {current_size}")
-            if current_size >= expected_size:
-                print("Index is up-to-date!")
-                break
+    def wait_for_index_update(self, expected_size=None, signal_type="clip", max_wait=60):
+        """Wait until index contains new signal or until timeout."""
+        print("[INFO] Waiting for index to update...")
+        for _ in range(max_wait // 5):
+            size = self.get_index_size(signal_type)
+            print(f"[DEBUG] Index size: {size}")
+            if expected_size is None or size >= expected_size:
+                print("[INFO] Index likely updated.")
+                return
             time.sleep(5)
+        print("[WARN] Timed out waiting for index update.")
+
 
     def match_uploaded_files(self, files_to_send):
         """Match each uploaded file and print the response."""
@@ -168,18 +187,52 @@ class Evaluator:
             match_resp = self.match_local_content(match_file_path)
             print(json.dumps(match_resp, indent=2))
 
-def main():
-    evaluator = Evaluator()
-    BANK_NAME = "TEST_BANK_DATA"
-    if not evaluator.setup_bank(BANK_NAME):
-        return
+    def compare_hashes(self, hash1, hash2, signal_type="clip") -> dict:
+        url = f"{hma_app_url}/m/compare"
+        headers = {"Content-Type": "application/json"}
+        data = {
+            signal_type: [hash1, hash2]
+        }
 
-    files_to_send = [str(file) for file in image_input_dir.iterdir() if file.is_file()]
-    index_size_before = evaluator.get_index_size("clip")
-    evaluator.upload_files_to_bank(files_to_send, BANK_NAME)
-    expected_size = index_size_before + len(files_to_send)
-    evaluator.wait_for_index_update(expected_size, "clip")
-    evaluator.match_uploaded_files(files_to_send)
+        try:
+            response = requests.post(url, headers=headers, json=data)
+            if response.ok:
+                return {
+                    "status": "success",
+                    "result": response.json().get(signal_type)
+                }
+            else:
+                return {
+                    "status": "failure",
+                    "error": response.text,
+                    "code": response.status_code
+                }
+        except RequestException as e:
+            return {"status": "failure", "error": str(e)}
+
+def run_all_tests():
+    test_dir = os.path.join(os.path.dirname(__file__), "tests")
+    for fname in os.listdir(test_dir):
+        if fname.endswith("_test.py"):
+            print(f"Running {fname} ...")
+            subprocess.run(["python", os.path.join(test_dir, fname)], check=True)
+
+def main():
+    eval_mode = os.environ.get("EVAL_MODE", "smoke")
+    if eval_mode == "smoke":
+        evaluator = Evaluator()
+        BANK_NAME = os.getenv("BANK_NAME", "TEST_BANK_DATA")
+        if not evaluator.setup_bank(BANK_NAME):
+            return
+
+        files_to_send = [str(file) for file in image_input_dir.iterdir() if file.is_file()]
+        index_size_before = evaluator.get_index_size("clip")
+        evaluator.upload_files_to_bank(files_to_send, BANK_NAME)
+        expected_size = index_size_before + len(files_to_send)
+        evaluator.wait_for_index_update(expected_size, "clip")
+        evaluator.match_uploaded_files(files_to_send)
+    else:
+        run_all_tests()
 
 
 if __name__ == '__main__':

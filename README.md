@@ -92,7 +92,7 @@ To run the test suite (including pairwise_test.py) and retrieve the results file
 2. **Run the tests and save results to your host:**
 
    ```bash
-   docker run --rm -e EVAL_MODE=test -v "$PWD:/build" roost-eval
+   docker run --rm -e EVAL_MODE=test -e TOPK=5 -e THRESHOLD=25 -v "$PWD:/build" roost-eval
    ```
 
    - The `-e EVAL_MODE=test` environment variable tells the container to run all tests.
@@ -128,9 +128,17 @@ The evaluation pipeline supports several environment variables for customization
   - Used in: `evaluate.py`
 
 - **`OUTPUT_FILE`**: Specifies the output filename for test results
-  - Default: `pairwise_clip_compare.json`
-  - Used in: `tests/pairwise_test.py`
+  - Default: Varies by test (e.g., `pairwise_clip_compare.json`, `topk_test_results.json`)
+  - Used in: `tests/pairwise_test.py`, `tests/topk_test.py`, `tests/threshold_test.py`
   - Example: `docker run --rm -e OUTPUT_FILE=my_results.json -e EVAL_MODE=test -v "$PWD:/build" roost-eval`
+
+- **`TOPK`**: Specifies the number of top matches to return in the top-k test.
+  - Default: `3`
+  - Used in: `tests/topk_test.py`
+
+- **`THRESHOLD`**: Specifies the matching distance threshold for the threshold test.
+  - Default: `30`
+  - Used in: `tests/threshold_test.py`
 
 ### Bank Management
 
@@ -151,6 +159,8 @@ The evaluation pipeline supports several environment variables for customization
 ```bash
 docker run --rm \
   -e EVAL_MODE=test \
+  -e TOPK=5 \
+  -e THRESHOLD=25 \
   -e OUTPUT_FILE=custom_results.json \
   -e BANK_NAME=CUSTOM_BANK \
   -e HMA_HOST=localhost \

@@ -280,7 +280,7 @@ def run_all_tests():
     test_dir = os.path.join(os.path.dirname(__file__), "tests")
     for fname in os.listdir(test_dir):
         if fname.endswith("_test.py"):
-            print(f"Running {fname} ...")
+            print(f"Running {fname} ...", flush=True)
             subprocess.run(["python", os.path.join(test_dir, fname)], check=True)
 
 def main():

@@ -92,7 +92,7 @@ To run the test suite (including pairwise_test.py) and retrieve the results file
 2. **Run the tests and save results to your host:**
 
    ```bash
-   docker run --rm -e EVAL_MODE=test -v "$PWD:/build" roost-eval
+   docker run --rm -e EVAL_MODE=test -e MAX_K=10 -e THRESHOLD_MAX=100 -e THRESHOLD_STEP=20 -v "$PWD:/build" roost-eval
    ```
 
    - The `-e EVAL_MODE=test` environment variable tells the container to run all tests.
@@ -101,6 +101,20 @@ To run the test suite (including pairwise_test.py) and retrieve the results file
 3. **Find the results:**
 
    After the container finishes, you will find `pairwise_results.json` in your project root directory.
+
+4. **Running a Single Test**
+
+   You can run a single test script by specifying it as a command when running the Docker container. This overrides the default behavior of running all tests.
+
+   For example, to run only the top-k test:
+
+   ```bash
+   docker run --rm \
+     -e MAX_K=10 \
+     -e OUTPUT_FILE=topk_results.json \
+     -v "$PWD:/build" \
+     roost-eval python tests/topk_test.py
+   ```
 
 ---
 
@@ -128,9 +142,22 @@ The evaluation pipeline supports several environment variables for customization
   - Used in: `evaluate.py`
 
 - **`OUTPUT_FILE`**: Specifies the output filename for test results
-  - Default: `pairwise_clip_compare.json`
-  - Used in: `tests/pairwise_test.py`
+  - Default: Varies by test (e.g., `pairwise_clip_compare.json`, `topk_test_results.json`)
+  - Used in: `tests/pairwise_test.py`, `tests/topk_test.py`, `tests/threshold_test.py`
   - Example: `docker run --rm -e OUTPUT_FILE=my_results.json -e EVAL_MODE=test -v "$PWD:/build" roost-eval`
+
+- **`MAX_K`**: In top-k test, specifies the maximum k value to test, testing the range [1, MAX_K].
+  - Default: `5`
+  - Used in: `tests/topk_test.py`
+
+- **`THRESHOLD_MAX`**: In the threshold test, this specifies the maximum threshold to test. The test will run from 0 to `THRESHOLD_MAX`.
+  - Default: `100`
+  - Used in: `tests/threshold_test.py`
+
+- **`THRESHOLD_STEP`**: In the threshold test, this specifies the step size for the threshold range.
+  - Default: `20`
+  - Used in: `tests/threshold_test.py`
+
 
 ### Bank Management
 
@@ -151,6 +178,9 @@ The evaluation pipeline supports several environment variables for customization
 ```bash
 docker run --rm \
   -e EVAL_MODE=test \
+  -e MAX_K=5 \
+  -e THRESHOLD_MAX=80 \
+  -e THRESHOLD_STEP=10 \
   -e OUTPUT_FILE=custom_results.json \
   -e BANK_NAME=CUSTOM_BANK \
   -e HMA_HOST=localhost \

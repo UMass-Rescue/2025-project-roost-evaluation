@@ -12,6 +12,8 @@ hma_port = os.getenv("HMA_PORT", "5005")
 hma_app_url = f"http://{hma_host}:{hma_port}"
 hash_url = hma_app_url +  "/h/hash"  
 match_url = hma_app_url + "/m/lookup"
+match_url_topk = hma_app_url + "/m/lookup_topk"
+match_url_threshold = hma_app_url + "/m/lookup_threshold"
 
 class Evaluator:
     def bank_exists(self,bank_name: str) -> bool:
@@ -132,6 +134,70 @@ class Evaluator:
             print(f"Request exception: {str(e)}")  # Debug log
             return {'status': 'failure', 'error': str(e)}
 
+    def match_local_content_topk(self, file_path: str, k: int) -> dict:
+        hasher_resp = self.hash_local_content(file_path)
+        signal_type = 'clip'
+        signal = hasher_resp[signal_type]
+        params = {
+            'signal_type': signal_type,
+            'signal': signal,
+            'k': k
+        }
+
+        try:
+            response = requests.get(f"{match_url_topk}", params=params)
+            if response.ok:
+                result = response.json()
+                return {
+                    'status': 'success',
+                    'matches': result.get("matches", []),
+                    'signal_type': signal_type,
+                    'signal': signal
+                }
+            else:
+                print(f"API request failed: {response.status_code} - {response.text}")
+                return {
+                    'status': 'failure',
+                    'error': f'API request failed with status {response.status_code}',
+                    'response': response.text
+                }
+
+        except RequestException as e:
+            print(f"Request exception: {str(e)}")
+            return {'status': 'failure', 'error': str(e)}
+
+    def match_local_content_threshold(self, file_path: str, threshold: int) -> dict:
+        hasher_resp = self.hash_local_content(file_path)
+        signal_type = 'clip'
+        signal = hasher_resp[signal_type]
+        params = {
+            'signal_type': signal_type,
+            'signal': signal,
+            'threshold': threshold
+        }
+
+        try:
+            response = requests.get(f"{match_url_threshold}", params=params)
+            if response.ok:
+                result = response.json()
+                return {
+                    'status': 'success',
+                    'matches': result.get("matches", []),
+                    'signal_type': signal_type,
+                    'signal': signal
+                }
+            else:
+                print(f"API request failed: {response.status_code} - {response.text}")
+                return {
+                    'status': 'failure',
+                    'error': f'API request failed with status {response.status_code}',
+                    'response': response.text
+                }
+
+        except RequestException as e:
+            print(f"Request exception: {str(e)}")
+            return {'status': 'failure', 'error': str(e)}
+
     def get_index_size(self, SIGNAL_TYPE:  str) -> int:
         resp = requests.get(f"{hma_app_url}/m/index/status", params={"signal_type": SIGNAL_TYPE})
         index_size = resp.json().get(SIGNAL_TYPE, {}).get("size", 0)
@@ -214,7 +280,7 @@ def run_all_tests():
     test_dir = os.path.join(os.path.dirname(__file__), "tests")
     for fname in os.listdir(test_dir):
         if fname.endswith("_test.py"):
-            print(f"Running {fname} ...")
+            print(f"Running {fname} ...", flush=True)
             subprocess.run(["python", os.path.join(test_dir, fname)], check=True)
 
 def main():
@@ -233,7 +299,6 @@ def main():
         evaluator.match_uploaded_files(files_to_send)
     else:
         run_all_tests()
-
 
 if __name__ == '__main__':
     main()

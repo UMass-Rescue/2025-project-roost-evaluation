@@ -148,9 +148,16 @@ class Evaluator:
             response = requests.get(f"{match_url_topk}", params=params)
             if response.ok:
                 result = response.json()
+                matches = result.get("matches", [])
+                
+                # Extract filename from collab_metadata for each match
+                for match in matches:
+                    collab_metadata = match.get("collab_metadata", {})
+                    match["filename"] = collab_metadata.get("filename", "unknown")
+                
                 return {
                     'status': 'success',
-                    'matches': result.get("matches", []),
+                    'matches': matches,
                     'signal_type': signal_type,
                     'signal': signal
                 }
@@ -180,9 +187,16 @@ class Evaluator:
             response = requests.get(f"{match_url_threshold}", params=params)
             if response.ok:
                 result = response.json()
+                matches = result.get("matches", [])
+                
+                # Extract filename from collab_metadata for each match
+                for match in matches:
+                    collab_metadata = match.get("collab_metadata", {})
+                    match["filename"] = collab_metadata.get("filename", "unknown")
+                
                 return {
                     'status': 'success',
-                    'matches': result.get("matches", []),
+                    'matches': matches,
                     'signal_type': signal_type,
                     'signal': signal
                 }
@@ -251,6 +265,16 @@ class Evaluator:
         for match_file_path in files_to_send:
             print(match_file_path)
             match_resp = self.match_local_content(match_file_path)
+            
+            # Extract and display filenames from collab_metadata
+            if match_resp.get("status") == "success" and "matches" in match_resp:
+                matches = match_resp["matches"]
+                for bank_name, bank_matches in matches.items():
+                    for match in bank_matches:
+                        collab_metadata = match.get("collab_metadata", {})
+                        filename = collab_metadata.get("filename", "unknown")
+                        match["filename"] = filename
+            
             print(json.dumps(match_resp, indent=2))
 
     def compare_hashes(self, hash1, hash2, signal_type="clip") -> dict:

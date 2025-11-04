@@ -1,13 +1,83 @@
-version: '3.8'
+# ThreatExchange commit hash (locked to current main branch commit)
+# Commit: 2e5f23f6526e5c08793c946fa38f02baf3e56747
+x-postgres-variables: &postgres-variables
+  POSTGRES_USER: postgres
+  POSTGRES_PASSWORD: postgres
+  POSTGRES_HOST: hma-postgresql
+  POSTGRES_DB: media_match
+
+x-omm-variables: &omm-variables
+  OMM_CONFIG: /reference_configs/development_omm_config.py
+  OMM_DATABASE_URI: "postgresql+psycopg2://postgres:postgres@hma-postgresql/media_match"
 
 services:
+  hma-postgresql:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    volumes:
+      - hma-postgres-data:/var/lib/postgresql/data
+    environment:
+      <<: *postgres-variables
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 1s
+      retries: 5
+      start_period: 5s
+      timeout: 10s
+    networks:
+      - shared-hma-network
+
+  hma-migrations:
+    build:
+      context: .
+      dockerfile: Dockerfile.hma
+      args:
+        THREATEXCHANGE_COMMIT: 2e5f23f6526e5c08793c946fa38f02baf3e56747
+    restart: no
+    environment:
+      <<: *omm-variables
+    depends_on:
+      hma-postgresql:
+        condition: service_healthy
+    networks:
+      - shared-hma-network
+    command: /app/scripts/db-migrate.sh
+
+  hma-app:
+    build:
+      context: .
+      dockerfile: Dockerfile.hma
+      args:
+        THREATEXCHANGE_COMMIT: 2e5f23f6526e5c08793c946fa38f02baf3e56747
+    restart: unless-stopped
+    ports:
+      - "5005:5100"
+    environment:
+      <<: *omm-variables
+    depends_on:
+      hma-postgresql:
+        condition: service_healthy
+      hma-migrations:
+        condition: service_completed_successfully
+    networks:
+      - shared-hma-network
+
   evaluation:
     build: .
 #    command: tail -f /dev/null
+    environment:
+      - HMA_HOST=hma-app
+      - HMA_PORT=5100
+    volumes:
+      - .:/build
     networks:
       - shared-hma-network
-  
-# hma needs to be on same docker network 
+    depends_on:
+      - hma-app
+
+volumes:
+  hma-postgres-data:
+
 networks:
   shared-hma-network:
     external: true

@@ -1,120 +1,125 @@
 # 2025 Project Roost Evaluation
 
-## Steps for Running HMA with CLIP Extensions
+## Overview
 
-The HMA CLIP demo repository is available at [2025-project-hma-clip-demo](https://github.com/UMass-Rescue/2025-project-hma-clip-demo).
+This project evaluates content matching capabilities using HMA (Hasher-Matcher-Actioner) from Facebook's ThreatExchange repository. The project includes a docker-compose setup that automatically builds and runs HMA from a locked commit of the ThreatExchange repository, along with an evaluation service that runs tests against the local HMA container.
 
-To get HMA CLIP up and running, follow these steps:
+## Prerequisites
 
-### Prerequisites
+- Docker and Docker Compose must be installed on your machine
+- Git (for cloning the repository)
 
-- Docker and Docker Compose must be installed on your machine.
+## Quick Start
 
-### Setup
+### 1. Create the Docker Network
 
-1. **Clone the Repository**
+First, create the shared Docker network that all services will use:
 
-   ```bash
-   git clone [your-repository-url]
-   cd [repository-name]
-   ```
+```bash
+docker network create shared-hma-network
+```
 
-2. **Launch the Services**
+### 2. Start All Services
 
-   Use Docker Compose to build and start the services defined in the `docker-compose.yml` file:
+Use Docker Compose to build and start all services (HMA PostgreSQL, migrations, HMA app, and evaluation):
 
-   ```bash
-   docker compose up --build
-   ```
+```bash
+docker compose up --build
+```
 
-   This command builds the Docker image and starts the services, including the application and the database.
+This will:
+- Build HMA from the ThreatExchange repository at commit `2e5f23f6526e5c08793c946fa38f02baf3e56747` (locked to current main branch)
+- Start PostgreSQL database for HMA
+- Run database migrations
+- Start the HMA application on port 5005 (accessible from host)
+- Start the evaluation service configured to connect to the local HMA container
 
-   You can configure the PostgreSQL database and other environment variables for HMA CLIP in `docker-compose.yml` and `omm_config.py`.
+### 3. Running the Evaluation
+
+The evaluation service automatically connects to the local HMA container via the Docker network. By default, it runs in "smoke" mode which:
+- Creates a test bank
+- Uploads sample images
+- Performs matching operations
+
+To run in smoke mode (default):
+```bash
+docker compose up evaluation
+```
+
+To run all tests:
+```bash
+docker compose run --rm -e EVAL_MODE=test evaluation
+```
 
 ---
 
-## Instructions to Run the Evaluation Pipeline
+## HMA Configuration
 
-1. **Ensure the Latest HMA Version**
-
-   In the Dockerfile of HMA CLIP, ensure the latest version of HMA is pulled. If not, update line 1 in the Dockerfile to:
-
-   ```dockerfile
-   FROM ghcr.io/facebook/threatexchange/hma:1.0.17
-   ```
-
-   Alternatively, use the `hma:latest` tag.
-
-2. **Use an External Network**
-
-   Before running HMA CLIP, configure it to use an external network:
-
-   - Create a Docker network called `shared-hma-network` by running the following command:
-
-     ```bash
-     docker network create shared-hma-network
-     ```
-
-   - Update the `networks` section in `docker-compose.yml` to:
-
-     ```yaml
-     networks:
-       shared-hma-network:
-         external: true
-     ```
-
-   - Under the `services` section, ensure the network is set to `shared-hma-network`.
-
-3. **Check the port for HMA-CLIP**
-   
-   In macOS, 5000 port could be a reserved port. So, update the ports column under  `services`: `app` in `docker-compose.yml` of HMA CLIP to:
-
-   ```yaml
-   ports:
-      - 5005:5000  
-   ```
-
-   - This forwards the requests on port 5005 on your machine to port 5000 on docker. You also need to change the hma_app_url variable to use port 5005 in evaluate.py of roost-evaluation project.
+The HMA container is built from the ThreatExchange repository and locked to a specific commit:
+- **Repository**: https://github.com/facebook/ThreatExchange
+- **Commit**: `2e5f23f6526e5c08793c946fa38f02baf3e56747` (current main branch)
+- **Port**: HMA API is exposed on port 5005 (mapped from internal port 5100)
+- **Network**: All services run on `shared-hma-network` for inter-container communication
 
 
 ---
 
 ## Running Tests and Retrieving Results
 
-To run the test suite (including pairwise_test.py) and retrieve the results file (pairwise_clip_compare.json) to your host machine, follow these steps:
+### Using Docker Compose (Recommended)
 
-1. **Build the Docker image (if not already built):**
+With the docker-compose setup, tests automatically connect to the local HMA container. The project directory is automatically mounted to `/build` in the container, so results are saved directly to your project directory.
+
+1. **Run all tests:**
+
+   ```bash
+   docker compose run --rm -e EVAL_MODE=test -e MAX_K=10 -e THRESHOLD_MAX=100 -e THRESHOLD_STEP=20 evaluation
+   ```
+
+   - The `-e EVAL_MODE=test` environment variable tells the container to run all tests.
+   - Results are automatically saved to your project directory (e.g., `pairwise_clip_compare.json`, `topk_test_results.json`).
+
+2. **Run a single test:**
+
+   For example, to run only the top-k test:
+
+   ```bash
+   docker compose run --rm \
+     -e MAX_K=10 \
+     -e OUTPUT_FILE=topk_results.json \
+     evaluation python tests/topk_test.py
+   ```
+
+3. **Find the results:**
+
+   After the container finishes, you will find the result JSON files (e.g., `pairwise_clip_compare.json`, `topk_test_results.json`) in your project root directory.
+
+### Using Standalone Docker (Alternative)
+
+If you prefer to run tests separately without docker-compose, ensure HMA is running and accessible:
+
+1. **Build the Docker image:**
 
    ```bash
    docker build -t roost-eval .
    ```
 
-2. **Run the tests and save results to your host:**
-
-   ```bash
-   docker run --rm -e EVAL_MODE=test -e MAX_K=10 -e THRESHOLD_MAX=100 -e THRESHOLD_STEP=20 -v "$PWD:/build" roost-eval
-   ```
-
-   - The `-e EVAL_MODE=test` environment variable tells the container to run all tests.
-   - The `-v "$PWD:/build"` flag mounts your current directory to `/build` in the container, so any files written to `/build` (such as `pairwise_results.json`) will appear in your project directory on your host.
-
-3. **Find the results:**
-
-   After the container finishes, you will find `pairwise_results.json` in your project root directory.
-
-4. **Running a Single Test**
-
-   You can run a single test script by specifying it as a command when running the Docker container. This overrides the default behavior of running all tests.
-
-   For example, to run only the top-k test:
+2. **Run tests pointing to local HMA:**
 
    ```bash
    docker run --rm \
+     --network shared-hma-network \
+     -e EVAL_MODE=test \
+     -e HMA_HOST=hma-app \
+     -e HMA_PORT=5100 \
      -e MAX_K=10 \
-     -e OUTPUT_FILE=topk_results.json \
+     -e THRESHOLD_MAX=100 \
+     -e THRESHOLD_STEP=20 \
      -v "$PWD:/build" \
-     roost-eval python tests/topk_test.py
+     roost-eval
    ```
+
+   Note: When using standalone Docker, you must be on the same network (`shared-hma-network`) and use `HMA_HOST=hma-app` and `HMA_PORT=5100` to connect to the HMA container.
 
 ---
 
@@ -125,14 +130,19 @@ The evaluation pipeline supports several environment variables for customization
 ### HMA API Configuration
 
 - **`HMA_HOST`**: Hostname for the HMA API server
-  - Default: `host.docker.internal`
+  - Default: `host.docker.internal` (when running standalone)
+  - Default in docker-compose: `hma-app` (configured automatically)
   - Used in: `evaluate.py`, `tests/cleanup_banks.py`
-  - Example: `docker run --rm -e HMA_HOST=localhost -e EVAL_MODE=test -v "$PWD:/build" roost-eval`
+  - When using docker-compose, the evaluation service automatically uses `hma-app` to connect to the local HMA container
+  - Example (standalone): `docker run --rm -e HMA_HOST=localhost -e EVAL_MODE=test -v "$PWD:/build" roost-eval`
 
 - **`HMA_PORT`**: Port number for the HMA API server
-  - Default: `5005`
+  - Default: `5005` (when accessing from host)
+  - Default in docker-compose: `5100` (internal port, configured automatically)
   - Used in: `evaluate.py`, `tests/cleanup_banks.py`
-  - Example: `docker run --rm -e HMA_PORT=5000 -e EVAL_MODE=test -v "$PWD:/build" roost-eval`
+  - When using docker-compose, the evaluation service automatically uses port `5100` (internal container port)
+  - External access: Port `5005` on host maps to port `5100` in the HMA container
+  - Example (standalone): `docker run --rm -e HMA_PORT=5000 -e EVAL_MODE=test -v "$PWD:/build" roost-eval`
 
 ### Test Configuration
 
@@ -175,16 +185,33 @@ The evaluation pipeline supports several environment variables for customization
 
 ### Example with Multiple Custom Configuration
 
+**Using Docker Compose (recommended):**
+
 ```bash
-docker run --rm \
+docker compose run --rm \
   -e EVAL_MODE=test \
   -e MAX_K=5 \
   -e THRESHOLD_MAX=80 \
   -e THRESHOLD_STEP=10 \
   -e OUTPUT_FILE=custom_results.json \
   -e BANK_NAME=CUSTOM_BANK \
-  -e HMA_HOST=localhost \
-  -e HMA_PORT=5000 \
+  -e IMAGE_INPUT_DIR=/custom/images \
+  evaluation
+```
+
+**Using Standalone Docker:**
+
+```bash
+docker run --rm \
+  --network shared-hma-network \
+  -e EVAL_MODE=test \
+  -e MAX_K=5 \
+  -e THRESHOLD_MAX=80 \
+  -e THRESHOLD_STEP=10 \
+  -e OUTPUT_FILE=custom_results.json \
+  -e BANK_NAME=CUSTOM_BANK \
+  -e HMA_HOST=hma-app \
+  -e HMA_PORT=5100 \
   -e IMAGE_INPUT_DIR=/custom/images \
   -v "$PWD:/build" \
   roost-eval

@@ -1,0 +1,36 @@
+# Dockerfile to build HMA from ThreatExchange repository at a specific commit
+# ThreatExchange commit hash (locked to main branch): 2e5f23f6526e5c08793c946fa38f02baf3e56747
+
+FROM python:3.13-bullseye as builder
+
+# Accept build argument for commit hash
+ARG THREATEXCHANGE_COMMIT=2e5f23f6526e5c08793c946fa38f02baf3e56747
+
+# Clone ThreatExchange at the specific commit
+RUN apt-get update && apt-get install -y git && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /threatexchange
+
+# Clone and checkout the specific commit
+RUN git clone https://github.com/facebook/ThreatExchange.git . && \
+    git checkout ${THREATEXCHANGE_COMMIT} && \
+    rm -rf .git
+
+# Build stage - build HMA from the cloned source
+FROM python:3.13-bullseye
+
+WORKDIR /app
+
+# Copy the HMA source from the builder
+COPY --from=builder /threatexchange/hasher-matcher-actioner/pyproject.toml ./
+RUN pip install .[prod]
+
+COPY --from=builder /threatexchange/hasher-matcher-actioner/src /app
+COPY --from=builder /threatexchange/hasher-matcher-actioner/scripts/ /app/scripts
+
+# Copy reference configs
+COPY --from=builder /threatexchange/hasher-matcher-actioner/reference_omm_configs/ /reference_configs
+
+EXPOSE 5100
+CMD ["gunicorn", "--bind", "0.0.0.0:5100", "OpenMediaMatch.app:create_app()"]
+

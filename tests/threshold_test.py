@@ -5,7 +5,7 @@ from test_utils import get_image_files, write_results
 from evaluate import Evaluator
 
 OUTPUT_FILE = os.getenv("OUTPUT_FILE", "threshold_test_results.json")
-SIGNAL_TYPE = "clip"
+SIGNAL_TYPE = "clip_float"
 THRESHOLD_MAX = int(os.getenv("THRESHOLD_MAX", 100))
 THRESHOLD_STEP = int(os.getenv("THRESHOLD_STEP", 20))
 

@@ -103,7 +103,7 @@ class Evaluator:
 
     def match_local_content(self, file_path: str) -> dict:
         hasher_resp = self.hash_local_content(file_path)
-        signal_type = 'clip'
+        signal_type = 'clip_float'
         signal = hasher_resp[signal_type]
         params = {
             'signal_type': signal_type,
@@ -136,7 +136,7 @@ class Evaluator:
 
     def match_local_content_topk(self, file_path: str, k: int) -> dict:
         hasher_resp = self.hash_local_content(file_path)
-        signal_type = 'clip'
+        signal_type = 'clip_float'
         signal = hasher_resp[signal_type]
         params = {
             'signal_type': signal_type,
@@ -168,7 +168,7 @@ class Evaluator:
 
     def match_local_content_threshold(self, file_path: str, threshold: int) -> dict:
         hasher_resp = self.hash_local_content(file_path)
-        signal_type = 'clip'
+        signal_type = 'clip_float'
         signal = hasher_resp[signal_type]
         params = {
             'signal_type': signal_type,
@@ -231,7 +231,7 @@ class Evaluator:
             result = self.add_file_to_hma_bank(file_path, bank_name)
             print(result['response'])
 
-    def wait_for_index_update(self, expected_size=None, signal_type="clip", max_wait=60):
+    def wait_for_index_update(self, expected_size=None, signal_type="clip_float", max_wait=60):
         """Wait until index contains new signal or until timeout."""
         print("[INFO] Waiting for index to update...")
         for _ in range(max_wait // 5):
@@ -253,7 +253,7 @@ class Evaluator:
             match_resp = self.match_local_content(match_file_path)
             print(json.dumps(match_resp, indent=2))
 
-    def compare_hashes(self, hash1, hash2, signal_type="clip") -> dict:
+    def compare_hashes(self, hash1, hash2, signal_type="clip_float") -> dict:
         url = f"{hma_app_url}/m/compare"
         headers = {"Content-Type": "application/json"}
         data = {
@@ -292,10 +292,10 @@ def main():
             return
 
         files_to_send = [str(file) for file in image_input_dir.iterdir() if file.is_file()]
-        index_size_before = evaluator.get_index_size("clip")
+        index_size_before = evaluator.get_index_size("clip_float")
         evaluator.upload_files_to_bank(files_to_send, BANK_NAME)
         expected_size = index_size_before + len(files_to_send)
-        evaluator.wait_for_index_update(expected_size, "clip")
+        evaluator.wait_for_index_update(expected_size, "clip_float")
         evaluator.match_uploaded_files(files_to_send)
     else:
         run_all_tests()

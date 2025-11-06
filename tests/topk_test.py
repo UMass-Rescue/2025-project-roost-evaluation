@@ -5,7 +5,7 @@ from test_utils import get_image_files, write_results
 from evaluate import Evaluator
 
 OUTPUT_FILE = os.getenv("OUTPUT_FILE", "topk_test_results.json")
-SIGNAL_TYPE = "clip"
+SIGNAL_TYPE = "clip_float"
 MAX_K = int(os.getenv("MAX_K", 5))
 
 def main():

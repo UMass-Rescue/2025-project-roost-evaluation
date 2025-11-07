@@ -2,217 +2,110 @@
 
 ## Overview
 
-This project evaluates content matching capabilities using HMA (Hasher-Matcher-Actioner) from Facebook's ThreatExchange repository. The project includes a docker-compose setup that automatically builds and runs HMA from a locked commit of the ThreatExchange repository, along with an evaluation service that runs tests against the local HMA container.
+This project evaluates content matching capabilities using HMA (Hasher-Matcher-Actioner) from Facebook's ThreatExchange repository. The project includes a docker-compose setup that automatically builds and runs HMA from a locked commit, along with an evaluation service that runs tests against the local HMA container.
 
 ## Prerequisites
 
-- Docker and Docker Compose must be installed on your machine
-- Git (for cloning the repository)
+- Docker and Docker Compose
+- Git
 
 ## Quick Start
 
-### 1. Create the Docker Network
-
-First, create the shared Docker network that all services will use:
+### 1. Create Docker Network
 
 ```bash
 docker network create shared-hma-network
 ```
 
-### 2. Start All Services
-
-Use Docker Compose to build and start all services (HMA PostgreSQL, migrations, HMA app, and evaluation):
+### 2. Start Services
 
 ```bash
-docker compose up --build
+docker compose up --build -d
 ```
 
-This will:
-- Build HMA from the ThreatExchange repository at commit `2e5f23f6526e5c08793c946fa38f02baf3e56747` (locked to current main branch)
-- Start PostgreSQL database for HMA
-- Run database migrations
-- Start the HMA application on port 5005 (accessible from host)
-- Start the evaluation service configured to connect to the local HMA container
+This builds HMA from ThreatExchange at commit `aff3f3b8` and starts:
+- PostgreSQL database for HMA
+- Database migrations
+- HMA application (port 5005 on host, 5100 internally)
+- Evaluation service
 
-### 3. Running the Evaluation
+### 3. Run Tests
 
-The evaluation service automatically connects to the local HMA container via the Docker network. By default, it runs in "smoke" mode which:
-- Creates a test bank
-- Uploads sample images
-- Performs matching operations
-
-To run in smoke mode (default):
+**Smoke test (default):**
 ```bash
-docker compose up evaluation
+docker compose run --rm -e BANK_NAME=SMOKE_TEST evaluation
 ```
 
-To run all tests:
+**All tests:**
 ```bash
 docker compose run --rm -e EVAL_MODE=test evaluation
 ```
 
----
-
-## HMA Configuration
-
-The HMA container is built from the ThreatExchange repository and locked to a specific commit:
-- **Repository**: https://github.com/facebook/ThreatExchange
-- **Commit**: `2e5f23f6526e5c08793c946fa38f02baf3e56747` (current main branch)
-- **Port**: HMA API is exposed on port 5005 (mapped from internal port 5100)
-- **Network**: All services run on `shared-hma-network` for inter-container communication
-
-
----
-
-## Running Tests and Retrieving Results
-
-### Using Docker Compose (Recommended)
-
-With the docker-compose setup, tests automatically connect to the local HMA container. The project directory is automatically mounted to `/build` in the container, so results are saved directly to your project directory.
-
-1. **Run all tests:**
-
-   ```bash
-   docker compose run --rm -e EVAL_MODE=test -e MAX_K=10 -e THRESHOLD_MAX=100 -e THRESHOLD_STEP=20 evaluation
-   ```
-
-   - The `-e EVAL_MODE=test` environment variable tells the container to run all tests.
-   - Results are automatically saved to your project directory (e.g., `pairwise_clip_compare.json`, `topk_test_results.json`).
-
-2. **Run a single test:**
-
-   For example, to run only the top-k test:
-
-   ```bash
-   docker compose run --rm \
-     -e MAX_K=10 \
-     -e OUTPUT_FILE=topk_results.json \
-     evaluation python tests/topk_test.py
-   ```
-
-3. **Find the results:**
-
-   After the container finishes, you will find the result JSON files (e.g., `pairwise_clip_compare.json`, `topk_test_results.json`) in your project root directory.
-
-### Using Standalone Docker (Alternative)
-
-If you prefer to run tests separately without docker-compose, ensure HMA is running and accessible:
-
-1. **Build the Docker image:**
-
-   ```bash
-   docker build -t roost-eval .
-   ```
-
-2. **Run tests pointing to local HMA:**
-
-   ```bash
-   docker run --rm \
-     --network shared-hma-network \
-     -e EVAL_MODE=test \
-     -e HMA_HOST=hma-app \
-     -e HMA_PORT=5100 \
-     -e MAX_K=10 \
-     -e THRESHOLD_MAX=100 \
-     -e THRESHOLD_STEP=20 \
-     -v "$PWD:/build" \
-     roost-eval
-   ```
-
-   Note: When using standalone Docker, you must be on the same network (`shared-hma-network`) and use `HMA_HOST=hma-app` and `HMA_PORT=5100` to connect to the HMA container.
-
----
-
-## Runtime Configuration Variables
-
-The evaluation pipeline supports several environment variables for customization:
-
-### HMA API Configuration
-
-- **`HMA_HOST`**: Hostname for the HMA API server
-  - Default: `host.docker.internal` (when running standalone)
-  - Default in docker-compose: `hma-app` (configured automatically)
-  - Used in: `evaluate.py`, `tests/cleanup_banks.py`
-  - When using docker-compose, the evaluation service automatically uses `hma-app` to connect to the local HMA container
-  - Example (standalone): `docker run --rm -e HMA_HOST=localhost -e EVAL_MODE=test -v "$PWD:/build" roost-eval`
-
-- **`HMA_PORT`**: Port number for the HMA API server
-  - Default: `5005` (when accessing from host)
-  - Default in docker-compose: `5100` (internal port, configured automatically)
-  - Used in: `evaluate.py`, `tests/cleanup_banks.py`
-  - When using docker-compose, the evaluation service automatically uses port `5100` (internal container port)
-  - External access: Port `5005` on host maps to port `5100` in the HMA container
-  - Example (standalone): `docker run --rm -e HMA_PORT=5000 -e EVAL_MODE=test -v "$PWD:/build" roost-eval`
-
-### Test Configuration
-
-- **`EVAL_MODE`**: Controls the evaluation mode
-  - Default: `smoke` (runs smoke test)
-  - Options: `smoke`, `test` (runs all tests)
-  - Used in: `evaluate.py`
-
-- **`OUTPUT_FILE`**: Specifies the output filename for test results
-  - Default: Varies by test (e.g., `pairwise_clip_compare.json`, `topk_test_results.json`)
-  - Used in: `tests/pairwise_test.py`, `tests/topk_test.py`, `tests/threshold_test.py`
-  - Example: `docker run --rm -e OUTPUT_FILE=my_results.json -e EVAL_MODE=test -v "$PWD:/build" roost-eval`
-
-- **`MAX_K`**: In top-k test, specifies the maximum k value to test, testing the range [1, MAX_K].
-  - Default: `5`
-  - Used in: `tests/topk_test.py`
-
-- **`THRESHOLD_MAX`**: In the threshold test, this specifies the maximum threshold to test. The test will run from 0 to `THRESHOLD_MAX`.
-  - Default: `100`
-  - Used in: `tests/threshold_test.py`
-
-- **`THRESHOLD_STEP`**: In the threshold test, this specifies the step size for the threshold range.
-  - Default: `20`
-  - Used in: `tests/threshold_test.py`
-
-
-### Bank Management
-
-- **`BANK_NAME`**: Name of the HMA bank to use for testing
-  - Default: `TEST_BANK_DATA`
-  - Used in: `evaluate.py`
-  - Example: `docker run --rm -e BANK_NAME=MY_TEST_BANK -e EVAL_MODE=smoke -v "$PWD:/build" roost-eval`
-
-### Input Configuration
-
-- **`IMAGE_INPUT_DIR`**: Directory containing images for processing
-  - Default: `./resources/images` (relative to project root)
-  - Used in: `tests/test_utils.py`
-  - Example: `docker run --rm -e IMAGE_INPUT_DIR=/custom/images -e EVAL_MODE=test -v "$PWD:/build" roost-eval`
-
-### Example with Multiple Custom Configuration
-
-**Using Docker Compose (recommended):**
-
+**With custom parameters:**
 ```bash
 docker compose run --rm \
   -e EVAL_MODE=test \
-  -e MAX_K=5 \
-  -e THRESHOLD_MAX=80 \
-  -e THRESHOLD_STEP=10 \
-  -e OUTPUT_FILE=custom_results.json \
-  -e BANK_NAME=CUSTOM_BANK \
-  -e IMAGE_INPUT_DIR=/custom/images \
+  -e MAX_K=10 \
+  -e THRESHOLD_MAX=100 \
+  -e THRESHOLD_STEP=20 \
   evaluation
 ```
 
-**Using Standalone Docker:**
+## Test Logs
+
+All test runs create detailed logs in `test_run_logs/` folder:
+- Format: `{test_run_type}_{date}_{time}.log` (e.g., `smoke_20251107_115430.log`)
+- Terminal shows minimal progress output
+- Full logs with timestamps saved to files
+
+## Features
+
+- **Automatic database cleanup**: Tests start with a clean database and empty index
+- **CLIP extension support**: HMA configured with CLIP signal type for semantic image matching
+- **Custom endpoints**: Includes `lookup_topk` and `lookup_threshold` endpoints via patch
+- **File logging**: All test output logged to files with minimal terminal noise
+
+## HMA Configuration
+
+- **Repository**: https://github.com/facebook/ThreatExchange
+- **Commit**: `aff3f3b8` (locked for reproducibility)
+- **Port**: 5005 (host) → 5100 (container)
+- **Network**: `shared-hma-network`
+- **Config**: `omm_config.py` (includes CLIP extension)
+
+## Environment Variables
+
+### Test Configuration
+- `EVAL_MODE`: `smoke` (default) or `test`
+- `BANK_NAME`: Bank name for testing (default: `TEST_BANK_DATA`)
+- `MAX_K`: Maximum k for top-k test (default: `5`)
+- `THRESHOLD_MAX`: Maximum threshold value (default: `100`)
+- `THRESHOLD_STEP`: Threshold step size (default: `20`)
+
+### HMA Connection (auto-configured in docker-compose)
+- `HMA_HOST`: `hma-app` (internal)
+- `HMA_PORT`: `5100` (internal)
+
+## Results
+
+Test results are saved as JSON files in the project root:
+- `pairwise_clip_compare.json`
+- `topk_test_results.json`
+- `threshold_test_results.json`
+
+## Troubleshooting
 
 ```bash
-docker run --rm \
-  --network shared-hma-network \
-  -e EVAL_MODE=test \
-  -e MAX_K=5 \
-  -e THRESHOLD_MAX=80 \
-  -e THRESHOLD_STEP=10 \
-  -e OUTPUT_FILE=custom_results.json \
-  -e BANK_NAME=CUSTOM_BANK \
-  -e HMA_HOST=hma-app \
-  -e HMA_PORT=5100 \
-  -e IMAGE_INPUT_DIR=/custom/images \
-  -v "$PWD:/build" \
-  roost-eval
+# Check service status
+docker compose ps
+
+# View logs
+docker compose logs hma-app
+docker compose logs evaluation
+
+# Check HMA API
+curl http://localhost:5005/c/banks
+
+# Verify database
+docker compose exec hma-postgresql psql -U postgres -d media_match -c "\dt"
 ```

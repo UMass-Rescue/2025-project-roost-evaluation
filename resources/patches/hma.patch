@@ -1,8 +1,15 @@
 diff --git a/.github/workflows/hma-ci.yaml b/.github/workflows/hma-ci.yaml
-index 00cff0e0..ae5d513f 100644
+index 00cff0e0..87fb8788 100644
 --- a/.github/workflows/hma-ci.yaml
 +++ b/.github/workflows/hma-ci.yaml
-@@ -11,6 +11,7 @@ on:
+@@ -5,12 +5,14 @@ on:
+   push:
+     branches:
+       - main
++      - development
+     paths:
+       - "hasher-matcher-actioner/**"
+       - ".github/workflows/hma-ci.yaml"
    pull_request:
      branches:
        - main
@@ -11,10 +18,10 @@ index 00cff0e0..ae5d513f 100644
        - "hasher-matcher-actioner/**"
        - ".github/workflows/hma-ci.yaml"
 diff --git a/hasher-matcher-actioner/src/OpenMediaMatch/blueprints/matching.py b/hasher-matcher-actioner/src/OpenMediaMatch/blueprints/matching.py
-index 5a59e3ba..dbd7df20 100644
+index 7d94e3ed..446b9437 100644
 --- a/hasher-matcher-actioner/src/OpenMediaMatch/blueprints/matching.py
 +++ b/hasher-matcher-actioner/src/OpenMediaMatch/blueprints/matching.py
-@@ -45,6 +45,12 @@ class MatchWithDistance(t.TypedDict):
+@@ -45,6 +45,13 @@ class MatchWithDistance(t.TypedDict):
      distance: str
  
  
@@ -24,12 +31,13 @@ index 5a59e3ba..dbd7df20 100644
 +    signal: str
 +
 +
++
  TMatchByBank = t.Mapping[str, t.Sequence[MatchWithDistance]]
  TBankMatchBySignalType = t.Mapping[str, TMatchByBank]
  
-@@ -147,6 +153,78 @@ def raw_lookup():
-     return {"matches": lookup_signal_func(signal, signal_type_name)}
+@@ -151,6 +158,78 @@ def raw_lookup():
  
+     return {"matches": lookup_signal_func(signal, signal_type_name, requested_banks)}
  
 +@bp.route("/lookup_threshold")
 +def lookup_threshold():
@@ -103,12 +111,12 @@ index 5a59e3ba..dbd7df20 100644
 +    return {"matches": matches}
 +
 +
+ 
  def query_index(
      signal: str, signal_type_name: str
- ) -> t.Sequence[IndexMatchUntyped[SignalSimilarityInfo, int]]:
-@@ -168,6 +246,58 @@ def query_index(
+@@ -172,6 +251,58 @@ def query_index(
+     current_app.logger.debug("[lookup_signal] query complete")
      return results
- 
  
 +def query_index_threshold(
 +    signal: str, signal_type_name: str, threshold: str
@@ -162,11 +170,11 @@ index 5a59e3ba..dbd7df20 100644
 +    return results
 +
 +
- def lookup_signal(signal: str, signal_type_name: str) -> list[int]:
-     results = query_index(signal, signal_type_name)
-     return [m.metadata for m in results]
+ 
+ def lookup_signal(
+     signal: str, signal_type_name: str, banks: t.Optional[t.Set[str]] = None
 diff --git a/hasher-matcher-actioner/src/OpenMediaMatch/tests/test_match_api.py b/hasher-matcher-actioner/src/OpenMediaMatch/tests/test_match_api.py
-index 435681ca..13eb0197 100644
+index 3a558d52..93f9d21e 100644
 --- a/hasher-matcher-actioner/src/OpenMediaMatch/tests/test_match_api.py
 +++ b/hasher-matcher-actioner/src/OpenMediaMatch/tests/test_match_api.py
 @@ -1,12 +1,14 @@
@@ -184,7 +192,7 @@ index 435681ca..13eb0197 100644
  from threatexchange.exchanges.impl.static_sample import StaticSampleSignalExchangeAPI
  
  from OpenMediaMatch.tests.utils import app
-@@ -34,9 +36,51 @@ def client_with_sample_data(app) -> FlaskClient:
+@@ -34,9 +36,7 @@ def client_with_sample_data(app) -> FlaskClient:
      fetcher.fetch_all(storage, storage.get_signal_type_configs())
      build_index.build_all_indices(storage, storage, storage)
  
@@ -192,6 +200,13 @@ index 435681ca..13eb0197 100644
 -    assert client.get("/status").status_code == 200
 -    return client
 +    return app.test_client()
+ 
+ 
+ def test_raw_lookups(client_with_sample_data: FlaskClient):
+@@ -102,6 +102,224 @@ def test_lookups(client_with_sample_data: FlaskClient):
+             assert "distance" in match
+ 
+ 
 +
 +
 +# Helper functions for mock-based tests
@@ -236,13 +251,6 @@ index 435681ca..13eb0197 100644
 +        1002: {signal_type_name: "signal_2"},
 +        1003: {signal_type_name: "signal_3"},
 +    }
- 
- 
- def test_raw_lookups(client_with_sample_data: FlaskClient):
-@@ -100,3 +144,175 @@ def test_lookups(client_with_sample_data: FlaskClient):
-         for match in with_dist_matches:
-             assert "bank_content_id" in match
-             assert "distance" in match
 +
 +
 +def test_lookup_topk(client_with_sample_data: FlaskClient):
@@ -415,3 +423,19 @@ index 435681ca..13eb0197 100644
 +        )
 +        assert resp.status_code == 200
 +        assert len(resp.json["matches"]) == 1  # type: ignore
++
++
+ @pytest.fixture()
+ def client_with_multi_bank_data(app) -> FlaskClient:
+     """Fixture that sets up multiple banks with sample data for testing bank filtering."""
+@@ -121,9 +339,7 @@ def client_with_multi_bank_data(app) -> FlaskClient:
+     # Build indices
+     build_index.build_all_indices(storage, storage, storage)
+ 
+-    client = app.test_client()
+-    assert client.get("/status").status_code == 200
+-    return client
++    return app.test_client()
+ 
+ 
+ def test_raw_lookup_with_bank_filter(client_with_multi_bank_data: FlaskClient):

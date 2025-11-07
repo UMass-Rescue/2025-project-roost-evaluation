@@ -73,9 +73,9 @@ def main():
         results.append(result)
         _log_debug(json.dumps(result, indent=2))
 
-    write_results(results, OUTPUT_FILE)
-    print(f"[INFO] Pairwise CLIP comparison complete. Results saved to {OUTPUT_FILE}")
-    _log_info(f"Pairwise CLIP comparison complete. Results saved to {OUTPUT_FILE}")
+    output_path = write_results(results, OUTPUT_FILE)
+    print(f"[INFO] Pairwise CLIP comparison complete. Results saved to {output_path}")
+    _log_info(f"Pairwise CLIP comparison complete. Results saved to {output_path}")
 
 if __name__ == "__main__":
     main()

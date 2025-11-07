@@ -506,6 +506,12 @@ def run_all_tests():
     global log_file  # Ensure we can access the log_file variable
     _log_info("[STARTUP] Creating fresh database for test run...")
     print("Running tests...")
+    
+    # Generate timestamp for this test run and pass to subprocesses
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    os.environ["TEST_RUN_TIMESTAMP"] = timestamp
+    _log_info(f"Test run timestamp: {timestamp}")
+    
     evaluator = Evaluator()
     evaluator.cleanup_test_environment(signal_type="clip")
     

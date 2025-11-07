@@ -2,14 +2,7 @@ import os
 import itertools
 import json
 import sys
-try:
-    from tqdm import tqdm
-    HAS_TQDM = True
-except ImportError:
-    HAS_TQDM = False
-    # Fallback: create a simple tqdm-like iterator
-    def tqdm(iterable, **kwargs):
-        return iterable
+from tqdm import tqdm
 from tests.test_utils import get_image_files, hash_image, write_results, decode_clip_hex_to_floats
 from evaluate import Evaluator, get_logger, _log_info, _log_debug, _log_warning
 

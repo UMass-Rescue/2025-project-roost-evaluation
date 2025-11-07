@@ -18,7 +18,7 @@ index 00cff0e0..87fb8788 100644
        - "hasher-matcher-actioner/**"
        - ".github/workflows/hma-ci.yaml"
 diff --git a/hasher-matcher-actioner/src/OpenMediaMatch/blueprints/matching.py b/hasher-matcher-actioner/src/OpenMediaMatch/blueprints/matching.py
-index 7d94e3ed..446b9437 100644
+index 7d94e3ed..a214ea86 100644
 --- a/hasher-matcher-actioner/src/OpenMediaMatch/blueprints/matching.py
 +++ b/hasher-matcher-actioner/src/OpenMediaMatch/blueprints/matching.py
 @@ -45,6 +45,13 @@ class MatchWithDistance(t.TypedDict):
@@ -114,7 +114,7 @@ index 7d94e3ed..446b9437 100644
  
  def query_index(
      signal: str, signal_type_name: str
-@@ -172,6 +251,58 @@ def query_index(
+@@ -172,6 +251,63 @@ def query_index(
      current_app.logger.debug("[lookup_signal] query complete")
      return results
  
@@ -129,6 +129,11 @@ index 7d94e3ed..446b9437 100644
 +    except Exception as e:
 +        abort(400, f"invalid signal: {e}")
 +
++    try:
++        threshold_int = int(threshold)
++    except ValueError:
++        abort(400, f"invalid threshold: must be an integer")
++
 +    index = _get_index(signal_type)
 +
 +    if index is None:
@@ -139,7 +144,7 @@ index 7d94e3ed..446b9437 100644
 +            f"Signal type '{signal_type_name}' does not support query_threshold method",
 +        )
 +    current_app.logger.debug("[lookup_signal_threshold] querying index")
-+    results = index.query_threshold(signal, threshold)  # type: ignore[attr-defined]
++    results = index.query_threshold(signal, threshold_int)  # type: ignore[attr-defined]
 +    current_app.logger.debug("[lookup_signal_threshold] query complete")
 +    return results
 +

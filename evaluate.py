@@ -517,6 +517,7 @@ def run_all_tests():
     
     test_dir = os.path.join(os.path.dirname(__file__), "tests")
     test_files = [f for f in os.listdir(test_dir) if f.endswith("_test.py")]
+    _log_info(f"Found {len(test_files)} test files: {test_files}")
     
     for i, fname in enumerate(test_files, 1):
         print(f"[{i}/{len(test_files)}] {fname}")
@@ -542,6 +543,8 @@ def run_all_tests():
         for handler in logger.handlers:
             if hasattr(handler, 'flush'):
                 handler.flush()
+        # Print to terminal that we're starting (for user feedback)
+        print(f"  Starting {fname}...", end="", flush=True)
         try:
             # Use subprocess.run with capture_output - this should work fine
             # The key is ensuring we don't have file handler conflicts
@@ -554,6 +557,7 @@ def run_all_tests():
                 timeout=3600,
                 cwd=project_root
             )
+            print()  # New line after subprocess completes
             _log_info(f"Subprocess completed with return code: {result.returncode}")
         except subprocess.TimeoutExpired:
             _log_error(f"Test {fname} timed out after 3600 seconds")
@@ -564,6 +568,16 @@ def run_all_tests():
         # Log captured output to file
         if result.stdout:
             _log_info(result.stdout)
+            # Extract result path from stdout and print to terminal
+            for line in result.stdout.splitlines():
+                if "Results saved to" in line:
+                    # Extract path - look for everything after "Results saved to"
+                    try:
+                        path_part = line.split("Results saved to")[-1].strip()
+                        if path_part:
+                            print(f"  → Results: {path_part}")
+                    except Exception:
+                        pass  # Ignore extraction errors
         if result.stderr:
             _log_error(result.stderr)
         if result.returncode != 0:

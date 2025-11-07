@@ -4,7 +4,6 @@ from requests import RequestException
 import json
 import time
 from pathlib import Path
-import subprocess
 import logging
 from datetime import datetime
 
@@ -69,16 +68,14 @@ def setup_logging(test_run_type="test"):
 
 # Fallback logger if setup_logging hasn't been called
 def get_logger():
-    """Get logger, creating a basic one if not initialized (no console output)"""
+    """Get logger - uses parent's logger if available, otherwise NullHandler"""
     global logger
     if logger is None:
         logger = logging.getLogger("evaluation")
         logger.setLevel(logging.DEBUG)
-        # Check if logger already has handlers (from setup_logging)
+        # Check if logger already has handlers (from setup_logging in parent)
         if not logger.handlers:
-            # For subprocess tests, don't set up file logging here - let parent capture stdout/stderr
-            # This avoids file locking issues and hangs
-            # Just use NullHandler to prevent any console output
+            # No parent logger - use NullHandler (tests run directly, not as subprocess)
             logger.addHandler(logging.NullHandler())
             logger.propagate = False
     return logger
@@ -518,71 +515,39 @@ def run_all_tests():
     test_dir = os.path.join(os.path.dirname(__file__), "tests")
     test_files = [f for f in os.listdir(test_dir) if f.endswith("_test.py")]
     _log_info(f"Found {len(test_files)} test files: {test_files}")
+    print(f"Found {len(test_files)} test files")
+    # Flush to ensure output is visible
+    import sys
+    sys.stdout.flush()
     
     for i, fname in enumerate(test_files, 1):
         print(f"[{i}/{len(test_files)}] {fname}")
         _log_info(f"Running {fname} ...")
-        # Flush log before subprocess to ensure it's written
-        for handler in logger.handlers:
-            if hasattr(handler, 'flush'):
-                handler.flush()
-        # Set up environment for subprocess
-        env = os.environ.copy()
-        project_root = os.path.dirname(__file__)
-        # Ensure PYTHONPATH includes project root (tests import from project root)
-        pythonpath = env.get("PYTHONPATH", "")
-        if pythonpath and project_root not in pythonpath:
-            env["PYTHONPATH"] = f"{project_root}:{pythonpath}"
-        elif not pythonpath:
-            env["PYTHONPATH"] = project_root
-        # Use sys.executable to ensure we use the same Python interpreter
-        import sys
-        test_path = os.path.join(test_dir, fname)
-        _log_info(f"Starting subprocess: {sys.executable} {test_path}")
-        # Flush again
-        for handler in logger.handlers:
-            if hasattr(handler, 'flush'):
-                handler.flush()
-        # Print to terminal that we're starting (for user feedback)
-        print(f"  Starting {fname}...", end="", flush=True)
+        
+        # Import and run test directly (no subprocess - much simpler!)
+        test_name = fname.replace("_test.py", "").replace("_", " ").title()
+        print(f"  {test_name}: ", end="", flush=True)
+        
         try:
-            # Use subprocess.run with capture_output - this should work fine
-            # The key is ensuring we don't have file handler conflicts
-            result = subprocess.run(
-                [sys.executable, test_path],
-                capture_output=True,
-                text=True,
-                check=False,
-                env=env,
-                timeout=3600,
-                cwd=project_root
-            )
-            print()  # New line after subprocess completes
-            _log_info(f"Subprocess completed with return code: {result.returncode}")
-        except subprocess.TimeoutExpired:
-            _log_error(f"Test {fname} timed out after 3600 seconds")
-            raise
+            # Import the test module directly
+            module_name = fname.replace(".py", "")
+            test_module = __import__(f"tests.{module_name}", fromlist=[module_name])
+            
+            # Run the test's main function directly
+            if hasattr(test_module, 'main'):
+                test_module.main()
+                print()  # Newline after test completes
+                _log_info(f"Test {fname} completed successfully")
+            else:
+                _log_error(f"Test {fname} has no main() function")
+                raise ValueError(f"Test {fname} has no main() function")
+                
         except Exception as e:
-            _log_error(f"Error running subprocess: {e}")
+            print()  # Newline on error
+            _log_error(f"Test {fname} failed: {e}")
+            import traceback
+            _log_error(traceback.format_exc())
             raise
-        # Log captured output to file
-        if result.stdout:
-            _log_info(result.stdout)
-            # Extract result path from stdout and print to terminal
-            for line in result.stdout.splitlines():
-                if "Results saved to" in line:
-                    # Extract path - look for everything after "Results saved to"
-                    try:
-                        path_part = line.split("Results saved to")[-1].strip()
-                        if path_part:
-                            print(f"  → Results: {path_part}")
-                    except Exception:
-                        pass  # Ignore extraction errors
-        if result.stderr:
-            _log_error(result.stderr)
-        if result.returncode != 0:
-            _log_error(f"Test {fname} failed with return code {result.returncode}")
-            raise subprocess.CalledProcessError(result.returncode, fname)
     
     print(f"✓ All tests completed. Logs: {log_file}")
 

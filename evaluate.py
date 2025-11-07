@@ -52,9 +52,9 @@ def setup_logging(test_run_type="test"):
     file_formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
     file_handler.setFormatter(file_formatter)
     
-    # Console handler - only INFO and above, minimal output
+    # Console handler - only WARNING and above, minimal output
     console_handler = logging.StreamHandler()
-    console_handler.setLevel(logging.INFO)
+    console_handler.setLevel(logging.WARNING)
     console_formatter = logging.Formatter('%(message)s')
     console_handler.setFormatter(console_formatter)
     
@@ -63,19 +63,24 @@ def setup_logging(test_run_type="test"):
     
     # Direct logger access since we just initialized it
     logger.info(f"Logging to: {log_file}")
+    # Flush to ensure the log file is created and accessible
+    file_handler.flush()
     return logger
 
 # Fallback logger if setup_logging hasn't been called
 def get_logger():
-    """Get logger, creating a basic one if not initialized"""
+    """Get logger, creating a basic one if not initialized (no console output)"""
     global logger
     if logger is None:
         logger = logging.getLogger("evaluation")
         logger.setLevel(logging.DEBUG)
+        # Check if logger already has handlers (from setup_logging)
         if not logger.handlers:
-            handler = logging.StreamHandler()
-            handler.setLevel(logging.INFO)
-            logger.addHandler(handler)
+            # For subprocess tests, don't set up file logging here - let parent capture stdout/stderr
+            # This avoids file locking issues and hangs
+            # Just use NullHandler to prevent any console output
+            logger.addHandler(logging.NullHandler())
+            logger.propagate = False
     return logger
 
 # Use get_logger() wrapper to ensure logger is always available
@@ -498,6 +503,7 @@ class Evaluator:
 
 def run_all_tests():
     setup_logging("test")
+    global log_file  # Ensure we can access the log_file variable
     _log_info("[STARTUP] Creating fresh database for test run...")
     print("Running tests...")
     evaluator = Evaluator()
@@ -509,15 +515,49 @@ def run_all_tests():
     for i, fname in enumerate(test_files, 1):
         print(f"[{i}/{len(test_files)}] {fname}")
         _log_info(f"Running {fname} ...")
-        result = subprocess.run(
-            ["python", os.path.join(test_dir, fname)],
-            capture_output=True,
-            text=True,
-            check=False
-        )
-        # Log all output to file
+        # Flush log before subprocess to ensure it's written
+        for handler in logger.handlers:
+            if hasattr(handler, 'flush'):
+                handler.flush()
+        # Set up environment for subprocess
+        env = os.environ.copy()
+        project_root = os.path.dirname(__file__)
+        # Ensure PYTHONPATH includes project root (tests import from project root)
+        pythonpath = env.get("PYTHONPATH", "")
+        if pythonpath and project_root not in pythonpath:
+            env["PYTHONPATH"] = f"{project_root}:{pythonpath}"
+        elif not pythonpath:
+            env["PYTHONPATH"] = project_root
+        # Use sys.executable to ensure we use the same Python interpreter
+        import sys
+        test_path = os.path.join(test_dir, fname)
+        _log_info(f"Starting subprocess: {sys.executable} {test_path}")
+        # Flush again
+        for handler in logger.handlers:
+            if hasattr(handler, 'flush'):
+                handler.flush()
+        try:
+            # Use subprocess.run with capture_output - this should work fine
+            # The key is ensuring we don't have file handler conflicts
+            result = subprocess.run(
+                [sys.executable, test_path],
+                capture_output=True,
+                text=True,
+                check=False,
+                env=env,
+                timeout=3600,
+                cwd=project_root
+            )
+            _log_info(f"Subprocess completed with return code: {result.returncode}")
+        except subprocess.TimeoutExpired:
+            _log_error(f"Test {fname} timed out after 3600 seconds")
+            raise
+        except Exception as e:
+            _log_error(f"Error running subprocess: {e}")
+            raise
+        # Log captured output to file
         if result.stdout:
-            _log_debug(result.stdout)
+            _log_info(result.stdout)
         if result.stderr:
             _log_error(result.stderr)
         if result.returncode != 0:

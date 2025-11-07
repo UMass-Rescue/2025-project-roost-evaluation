@@ -2,33 +2,47 @@ import os
 import json
 
 from test_utils import get_image_files, write_results
-from evaluate import Evaluator
+from evaluate import Evaluator, get_logger, _log_info, _log_debug, _log_warning
 
 OUTPUT_FILE = os.getenv("OUTPUT_FILE", "topk_test_results.json")
 SIGNAL_TYPE = "clip"
 MAX_K = int(os.getenv("MAX_K", 5))
 
 def main():
+    # Use existing logger if available, otherwise create a simple one
+    logger = get_logger()
     evaluator = Evaluator()
     image_files = get_image_files()
     k_values = range(1, MAX_K + 1)
+    # Use print for important messages so they're captured by parent process
     print(f"[INFO] Found {len(image_files)} images. Starting top-k match test with k values={list(k_values)}...")
+    _log_info(f"Found {len(image_files)} images. Starting top-k match test with k values={list(k_values)}...")
 
     results = []
+    total_tests = len(k_values) * len(image_files)
+    test_count = 0
+    
     for k in k_values:
         for img in image_files:
-            print(f"\n[TOP-K] Matching {img} with k={k}")
+            test_count += 1
+            print(f"[{test_count}/{total_tests}] Matching {img} with k={k}")
+            _log_info(f"[{test_count}/{total_tests}] Matching {img} with k={k}")
             
             match_resp = evaluator.match_local_content_topk(img, k)
 
             if match_resp.get("status") == "success":
+                matches_count = len(match_resp.get("matches", []))
                 result = {
                     "image": img,
                     "k": k,
                     "matches": match_resp.get("matches", [])
                 }
+                print(f"✓ Success: Found {matches_count} matches for {img} with k={k}")
+                _log_info(f"✓ Success: Found {matches_count} matches for {img} with k={k}")
             else:
-                print(f"[WARN] Top-k match API failed for {img}: {match_resp}")
+                error_msg = f"Top-k match API failed for {img} with k={k}: {match_resp.get('error', 'Unknown error')}"
+                print(f"[WARN] {error_msg}")
+                _log_warning(error_msg)
                 result = {
                     "image": img,
                     "k": k,
@@ -37,10 +51,11 @@ def main():
                 }
             
             results.append(result)
-            print(json.dumps(result, indent=2))
+            _log_debug(json.dumps(result, indent=2))
 
     write_results(results, OUTPUT_FILE)
-    print(f"\n[INFO] Top-k match test complete. Results saved to {OUTPUT_FILE}")
+    print(f"[INFO] Top-k match test complete. Results saved to {OUTPUT_FILE}")
+    _log_info(f"Top-k match test complete. Results saved to {OUTPUT_FILE}")
 
 if __name__ == "__main__":
     main()

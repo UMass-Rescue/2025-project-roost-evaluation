@@ -2,7 +2,7 @@ import os
 import json
 
 from test_utils import get_image_files, write_results
-from evaluate import Evaluator
+from evaluate import Evaluator, get_logger, _log_info, _log_debug, _log_warning
 
 OUTPUT_FILE = os.getenv("OUTPUT_FILE", "threshold_test_results.json")
 SIGNAL_TYPE = "clip"
@@ -10,26 +10,40 @@ THRESHOLD_MAX = int(os.getenv("THRESHOLD_MAX", 100))
 THRESHOLD_STEP = int(os.getenv("THRESHOLD_STEP", 20))
 
 def main():
+    # Use existing logger if available, otherwise create a simple one
+    logger = get_logger()
     evaluator = Evaluator()
     image_files = get_image_files()
     thresholds = range(0, THRESHOLD_MAX, THRESHOLD_STEP)
+    # Use print for important messages so they're captured by parent process
     print(f"[INFO] Found {len(image_files)} images. Starting threshold match test with thresholds={list(thresholds)}...")
+    _log_info(f"Found {len(image_files)} images. Starting threshold match test with thresholds={list(thresholds)}...")
 
     results = []
+    total_tests = len(thresholds) * len(image_files)
+    test_count = 0
+    
     for threshold in thresholds:
         for img in image_files:
-            print(f"\n[THRESHOLD] Matching {img} with threshold={threshold}")
+            test_count += 1
+            print(f"[{test_count}/{total_tests}] Matching {img} with threshold={threshold}")
+            _log_info(f"[{test_count}/{total_tests}] Matching {img} with threshold={threshold}")
             
             match_resp = evaluator.match_local_content_threshold(img, threshold)
 
             if match_resp.get("status") == "success":
+                matches_count = len(match_resp.get("matches", []))
                 result = {
                     "image": img,
                     "threshold": threshold,
                     "matches": match_resp.get("matches", [])
                 }
+                print(f"✓ Success: Found {matches_count} matches for {img} with threshold={threshold}")
+                _log_info(f"✓ Success: Found {matches_count} matches for {img} with threshold={threshold}")
             else:
-                print(f"[WARN] Threshold match API failed for {img}: {match_resp}")
+                error_msg = f"Threshold match API failed for {img} with threshold={threshold}: {match_resp.get('error', 'Unknown error')}"
+                print(f"[WARN] {error_msg}")
+                _log_warning(error_msg)
                 result = {
                     "image": img,
                     "threshold": threshold,
@@ -38,10 +52,11 @@ def main():
                 }
             
             results.append(result)
-            print(json.dumps(result, indent=2))
+            _log_debug(json.dumps(result, indent=2))
 
     write_results(results, OUTPUT_FILE)
-    print(f"\n[INFO] Threshold match test complete. Results saved to {OUTPUT_FILE}")
+    print(f"[INFO] Threshold match test complete. Results saved to {OUTPUT_FILE}")
+    _log_info(f"Threshold match test complete. Results saved to {OUTPUT_FILE}")
 
 if __name__ == "__main__":
     main()

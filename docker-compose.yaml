@@ -1,5 +1,5 @@
-# ThreatExchange commit hash (locked to current main branch commit)
-# Commit: 2e5f23f6526e5c08793c946fa38f02baf3e56747
+# ThreatExchange commit hash (compatible with hma.patch)
+# Commit: aff3f3b8
 x-postgres-variables: &postgres-variables
   POSTGRES_USER: postgres
   POSTGRES_PASSWORD: postgres
@@ -32,7 +32,7 @@ services:
       context: .
       dockerfile: Dockerfile.hma
       args:
-        THREATEXCHANGE_COMMIT: 2e5f23f6526e5c08793c946fa38f02baf3e56747
+        THREATEXCHANGE_COMMIT: aff3f3b8
     restart: no
     environment:
       <<: *omm-variables
@@ -48,7 +48,7 @@ services:
       context: .
       dockerfile: Dockerfile.hma
       args:
-        THREATEXCHANGE_COMMIT: 2e5f23f6526e5c08793c946fa38f02baf3e56747
+        THREATEXCHANGE_COMMIT: aff3f3b8
     restart: unless-stopped
     ports:
       - "5005:5100"
@@ -68,12 +68,18 @@ services:
     environment:
       - HMA_HOST=hma-app
       - HMA_PORT=5100
+      - POSTGRES_HOST=hma-postgresql
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=media_match
     volumes:
       - .:/build
     networks:
       - shared-hma-network
     depends_on:
       - hma-app
+      - hma-postgresql
 
 volumes:
   hma-postgres-data:

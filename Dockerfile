@@ -8,7 +8,7 @@ COPY evaluate.py /build/
 COPY tests/ /build/tests/
 COPY resources/images /build/resources/images
 
-RUN pip install requests numpy scipy 
+RUN pip install requests numpy scipy psycopg2-binary 
 
 # Set default image directory, can be overridden at runtime
 ENV IMAGE_INPUT_DIR=/build/resources/images

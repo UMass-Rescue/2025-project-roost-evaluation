@@ -177,6 +177,15 @@ class Evaluator:
     def match_local_content(self, file_path: str) -> dict:
         hasher_resp = self.hash_local_content(file_path)
         signal_type = 'clip'
+        
+        # Check if hash was successful and contains the signal type
+        if not isinstance(hasher_resp, dict) or signal_type not in hasher_resp:
+            return {
+                'status': 'failure',
+                'error': f'Failed to get {signal_type} hash',
+                'response': str(hasher_resp)
+            }
+        
         signal = hasher_resp[signal_type]
         params = {
             'signal_type': signal_type,
@@ -210,6 +219,15 @@ class Evaluator:
     def match_local_content_topk(self, file_path: str, k: int) -> dict:
         hasher_resp = self.hash_local_content(file_path)
         signal_type = 'clip'
+        
+        # Check if hash was successful and contains the signal type
+        if not isinstance(hasher_resp, dict) or signal_type not in hasher_resp:
+            return {
+                'status': 'failure',
+                'error': f'Failed to get {signal_type} hash',
+                'response': str(hasher_resp)
+            }
+        
         signal = hasher_resp[signal_type]
         params = {
             'signal_type': signal_type,
@@ -242,6 +260,15 @@ class Evaluator:
     def match_local_content_threshold(self, file_path: str, threshold: int) -> dict:
         hasher_resp = self.hash_local_content(file_path)
         signal_type = 'clip'
+        
+        # Check if hash was successful and contains the signal type
+        if not isinstance(hasher_resp, dict) or signal_type not in hasher_resp:
+            return {
+                'status': 'failure',
+                'error': f'Failed to get {signal_type} hash',
+                'response': str(hasher_resp)
+            }
+        
         signal = hasher_resp[signal_type]
         params = {
             'signal_type': signal_type,

@@ -2,7 +2,7 @@
 
 ## Overview
 
-This project evaluates content matching capabilities using HMA (Hasher-Matcher-Actioner) from Facebook's ThreatExchange repository. The project includes a docker-compose setup that automatically builds and runs HMA from a locked commit, along with an evaluation service that runs tests against the local HMA container.
+This project evaluates content matching capabilities using HMA (Hasher-Matcher-Actioner) from Facebook's ThreatExchange repository. Includes docker-compose setup that builds HMA from a locked commit and an evaluation service for running tests.
 
 ## Prerequisites
 
@@ -83,8 +83,8 @@ All test runs create detailed logs in `test_run_logs/` folder:
 - `THRESHOLD_STEP`: Threshold step size (default: `20`)
 
 ### HMA Connection (auto-configured in docker-compose)
-- `HMA_HOST`: `hma-app` (internal)
-- `HMA_PORT`: `5100` (internal)
+- `HMA_HOST`: `hma-app` (internal container name)
+- `HMA_PORT`: `5100` (internal container port)
 
 ## Results
 

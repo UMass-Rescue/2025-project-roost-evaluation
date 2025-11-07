@@ -2,8 +2,8 @@
 
 ## Quick Reference
 
-- **`docker compose exec`**: For running services (hma-app, hma-postgresql)
-- **`docker compose run --rm`**: For evaluation service (runs and exits)
+- **`docker compose exec`**: Run commands in running services (hma-app, hma-postgresql)
+- **`docker compose run --rm`**: Run one-off commands in evaluation service (exits after completion)
 
 ## Setup
 
@@ -54,9 +54,9 @@ docker compose run --rm \
 
 ## Test Logs
 
-Logs are saved to `test_run_logs/` folder:
+Logs saved to `test_run_logs/` folder:
 - Format: `{type}_{date}_{time}.log` (e.g., `smoke_20251107_115430.log`)
-- View latest log: `ls -t test_run_logs/ | head -1 | xargs cat`
+- View latest: `ls -t test_run_logs/ | head -1 | xargs cat`
 
 ## Verify Services
 

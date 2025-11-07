@@ -6,6 +6,13 @@ import time
 from pathlib import Path
 import subprocess
 
+# Try to import psycopg2 for database access (optional)
+try:
+    import psycopg2
+    PSYCOPG2_AVAILABLE = True
+except ImportError:
+    PSYCOPG2_AVAILABLE = False
+
 image_input_dir = Path("./resources/images")
 hma_host = os.getenv("HMA_HOST", "host.docker.internal")
 hma_port = os.getenv("HMA_PORT", "5005")
@@ -276,7 +283,119 @@ class Evaluator:
         except RequestException as e:
             return {"status": "failure", "error": str(e)}
 
+    def create_fresh_database(self):
+        """
+        Clear all data from the database to ensure a fresh start.
+        Clears all tables and PostgreSQL large objects (where HMA stores indexes).
+        """
+        if not PSYCOPG2_AVAILABLE:
+            print("[WARN] psycopg2 not available, cannot clear database")
+            return False
+
+        db_host = os.getenv("POSTGRES_HOST", "hma-postgresql")
+        db_port = os.getenv("POSTGRES_PORT", "5432")
+        db_user = os.getenv("POSTGRES_USER", "postgres")
+        db_password = os.getenv("POSTGRES_PASSWORD", "postgres")
+        db_name = os.getenv("POSTGRES_DB", "media_match")
+
+        try:
+            print("[INFO] Clearing all data from database...")
+            
+            def clear_all_data():
+                """Helper to clear all data and large objects"""
+                conn = psycopg2.connect(
+                    host=db_host,
+                    port=db_port,
+                    user=db_user,
+                    password=db_password,
+                    dbname=db_name,
+                    connect_timeout=10
+                )
+                conn.autocommit = True
+                cur = conn.cursor()
+                
+                # Delete all exchange data, banks, and related content
+                # Order matters due to foreign key constraints
+                cur.execute("DELETE FROM bank_content;")
+                bank_content_count = cur.rowcount
+                cur.execute("DELETE FROM content_signal;")
+                content_signal_count = cur.rowcount
+                cur.execute("DELETE FROM signal_index;")
+                signal_index_count = cur.rowcount
+                cur.execute("DELETE FROM exchange_data;")
+                exchange_data_count = cur.rowcount
+                cur.execute("DELETE FROM bank;")
+                bank_count = cur.rowcount
+                cur.execute("DELETE FROM exchange_fetch_status;")
+                exchange_fetch_status_count = cur.rowcount
+                
+                # Clear PostgreSQL large objects (where HMA stores indexes)
+                cur.execute("SELECT lo_unlink(oid) FROM pg_largeobject_metadata;")
+                large_object_count = cur.rowcount
+                
+                cur.close()
+                conn.close()
+                
+                return {
+                    'bank_content': bank_content_count,
+                    'content_signal': content_signal_count,
+                    'signal_index': signal_index_count,
+                    'exchange_data': exchange_data_count,
+                    'bank': bank_count,
+                    'exchange_fetch_status': exchange_fetch_status_count,
+                    'large_objects': large_object_count
+                }
+            
+            # Clear data multiple times to catch any auto-fetched data
+            # HMA has TASK_FETCHER enabled, which auto-fetches data from exchanges
+            for attempt in range(3):
+                if attempt > 0:
+                    time.sleep(2)  # Wait for fetcher to potentially add more data
+                deleted_counts = clear_all_data()
+                if attempt == 0:
+                    print(f"[INFO] Cleared: {deleted_counts}")
+                elif sum(deleted_counts.values()) > 0:
+                    print(f"[INFO] Additional data cleared: {deleted_counts}")
+                else:
+                    break  # No more data to clear
+            
+            print("[INFO] ✓ Database cleared successfully")
+            return True
+
+        except Exception as e:
+            print(f"[ERROR] Failed to clear database: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
+
+    def cleanup_test_environment(self, signal_type="clip"):
+        """
+        Clean up test environment by clearing all database data.
+        This ensures complete isolation - no leftover indexes or data from previous runs.
+        """
+        print("[INFO] Cleaning up test environment...")
+        
+        if self.create_fresh_database():
+            # Wait for HMA to process the changes
+            time.sleep(2)
+            
+            # Verify index is empty
+            index_size = self.get_index_size(signal_type)
+            if index_size == 0:
+                print(f"[INFO] ✓ {signal_type} index is empty")
+            else:
+                print(f"[WARN] Index size is {index_size}, expected 0")
+            return True
+        else:
+            print("[ERROR] Failed to clear database")
+            return False
+
 def run_all_tests():
+    # Clean up any leftover state from previous failed tests
+    print("[STARTUP] Creating fresh database for test run...")
+    evaluator = Evaluator()
+    evaluator.cleanup_test_environment(signal_type="clip")
+    
     test_dir = os.path.join(os.path.dirname(__file__), "tests")
     for fname in os.listdir(test_dir):
         if fname.endswith("_test.py"):
@@ -286,13 +405,18 @@ def run_all_tests():
 def main():
     eval_mode = os.environ.get("EVAL_MODE", "smoke")
     if eval_mode == "smoke":
+        # Clean up any leftover state from previous runs
+        print("[STARTUP] Creating fresh database for smoke test...")
         evaluator = Evaluator()
+        evaluator.cleanup_test_environment(signal_type="clip")
+        
         BANK_NAME = os.getenv("BANK_NAME", "TEST_BANK_DATA")
         if not evaluator.setup_bank(BANK_NAME):
             return
 
         files_to_send = [str(file) for file in image_input_dir.iterdir() if file.is_file()]
         index_size_before = evaluator.get_index_size("clip")
+        print(f"[INFO] Starting index size: {index_size_before}")
         evaluator.upload_files_to_bank(files_to_send, BANK_NAME)
         expected_size = index_size_before + len(files_to_send)
         evaluator.wait_for_index_update(expected_size, "clip")

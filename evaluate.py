@@ -61,6 +61,7 @@ def setup_logging(test_run_type="test"):
     logger.addHandler(file_handler)
     logger.addHandler(console_handler)
     
+    # Direct logger access since we just initialized it
     logger.info(f"Logging to: {log_file}")
     return logger
 
@@ -77,23 +78,33 @@ def get_logger():
             logger.addHandler(handler)
     return logger
 
+# Use get_logger() wrapper to ensure logger is always available
+def _log_debug(msg):
+    get_logger().debug(msg)
+def _log_info(msg):
+    get_logger().info(msg)
+def _log_warning(msg):
+    get_logger().warning(msg)
+def _log_error(msg):
+    get_logger().error(msg)
+
 class Evaluator:
     def bank_exists(self,bank_name: str) -> bool:
         """Check if a bank exists by making API call to HMA."""
         try:
             response = requests.get(f"{hma_app_url}/c/bank/{bank_name}")
             if response.ok:
-                logger.debug(f"Bank {bank_name} exists")
+                _log_debug(f"Bank {bank_name} exists")
                 return True
             elif response.status_code == 404:
-                logger.debug(f"Bank {bank_name} does not exist")
+                _log_debug(f"Bank {bank_name} does not exist")
                 return False
             else:
-                logger.error(f"Failed to check bank existence: {response.status_code} - {response.text}")
+                _log_error(f"Failed to check bank existence: {response.status_code} - {response.text}")
                 return False
                 
         except RequestException as e:
-            logger.error(f"Request exception while checking bank existence: {str(e)}")
+            _log_error(f"Request exception while checking bank existence: {str(e)}")
             return False
         
 
@@ -111,14 +122,14 @@ class Evaluator:
                 }
             )
             if create_response.ok:
-                logger.info(f"Successfully created bank {bank_name}")
+                _log_info(f"Successfully created bank {bank_name}")
                 return True
             else:
-                logger.error(f"Failed to create bank: {create_response.status_code} - {create_response.text}")
+                _log_error(f"Failed to create bank: {create_response.status_code} - {create_response.text}")
                 return False
                 
         except RequestException as e:
-            logger.error(f"Request exception while creating bank: {str(e)}")
+            _log_error(f"Request exception while creating bank: {str(e)}")
             return False
 
 
@@ -126,19 +137,19 @@ class Evaluator:
         """Add a file to the HMA bank and store its hash."""
         try:
             filename = os.path.basename(file_path)
-            logger.debug(f"Adding {filename} to HMA bank and storing hash...")
+            _log_debug(f"Adding {filename} to HMA bank and storing hash...")
 
             with open(file_path, 'rb') as f:
                 files = {'photo': (filename, f)}
                 response = requests.post(f"{hma_app_url}/c/bank/{bank_name}/content", files=files)
                 if response.ok:
-                    logger.debug(f"Successfully added {filename} to bank {bank_name}")
+                    _log_debug(f"Successfully added {filename} to bank {bank_name}")
                     return {'status': 'success', 'response': response.text}
                 else:
-                    logger.error(f"Failed to add {filename} to bank {bank_name}: {response.status_code} - {response.text}")
+                    _log_error(f"Failed to add {filename} to bank {bank_name}: {response.status_code} - {response.text}")
                     return {'status': 'failure', 'response': f"Failed for {filename}: {response.status_code} - {response.text}"}
         except RequestException as e:
-            logger.error(f"Request exception while adding file to bank: {str(e)}")
+            _log_error(f"Request exception while adding file to bank: {str(e)}")
             return {'status': 'failure', 'response': f"Request failed for {filename}: {e}"}
             
 
@@ -185,7 +196,7 @@ class Evaluator:
                     'signal': signal
                 }
             else:
-                logger.debug(f"API request failed: {response.status_code} - {response.text}")
+                _log_debug(f"API request failed: {response.status_code} - {response.text}")
                 return {
                     'status': 'failure',
                     'error': f'API request failed with status {response.status_code}',
@@ -193,7 +204,7 @@ class Evaluator:
                 }
             
         except RequestException as e:
-            logger.debug(f"Request exception: {str(e)}")
+            _log_debug(f"Request exception: {str(e)}")
             return {'status': 'failure', 'error': str(e)}
 
     def match_local_content_topk(self, file_path: str, k: int) -> dict:
@@ -217,7 +228,7 @@ class Evaluator:
                     'signal': signal
                 }
             else:
-                logger.debug(f"API request failed: {response.status_code} - {response.text}")
+                _log_debug(f"API request failed: {response.status_code} - {response.text}")
                 return {
                     'status': 'failure',
                     'error': f'API request failed with status {response.status_code}',
@@ -225,7 +236,7 @@ class Evaluator:
                 }
 
         except RequestException as e:
-            logger.debug(f"Request exception: {str(e)}")
+            _log_debug(f"Request exception: {str(e)}")
             return {'status': 'failure', 'error': str(e)}
 
     def match_local_content_threshold(self, file_path: str, threshold: int) -> dict:
@@ -249,7 +260,7 @@ class Evaluator:
                     'signal': signal
                 }
             else:
-                logger.debug(f"API request failed: {response.status_code} - {response.text}")
+                _log_debug(f"API request failed: {response.status_code} - {response.text}")
                 return {
                     'status': 'failure',
                     'error': f'API request failed with status {response.status_code}',
@@ -257,7 +268,7 @@ class Evaluator:
                 }
 
         except RequestException as e:
-            logger.debug(f"Request exception: {str(e)}")
+            _log_debug(f"Request exception: {str(e)}")
             return {'status': 'failure', 'error': str(e)}
 
     def get_index_size(self, SIGNAL_TYPE:  str) -> int:
@@ -269,7 +280,7 @@ class Evaluator:
         """Ensure the bank exists, create if not."""
         if not self.bank_exists(bank_name):
             if not self.create_bank(bank_name):
-                logger.error(f"Failed to create bank {bank_name}. Exiting.")
+                _log_error(f"Failed to create bank {bank_name}. Exiting.")
                 return False
         return True
 
@@ -278,42 +289,42 @@ class Evaluator:
         try:
             response = requests.delete(f"{hma_app_url}/c/bank/{bank_name}")
             if response.ok:
-                logger.info(f"Deleted bank {bank_name}")
+                _log_info(f"Deleted bank {bank_name}")
                 return True
             else:
-                logger.warning(f"Failed to delete bank {bank_name}: {response.status_code} - {response.text}")
+                _log_warning(f"Failed to delete bank {bank_name}: {response.status_code} - {response.text}")
                 return False
         except RequestException as e:
-            logger.error(f"Request exception while deleting bank: {str(e)}")
+            _log_error(f"Request exception while deleting bank: {str(e)}")
             return False
 
     def upload_files_to_bank(self, files_to_send, bank_name):
         """Upload files to the specified bank."""
         for file_path in files_to_send:
             result = self.add_file_to_hma_bank(file_path, bank_name)
-            logger.debug(result['response'])
+            _log_debug(result['response'])
 
     def wait_for_index_update(self, expected_size=None, signal_type="clip", max_wait=60):
         """Wait until index contains new signal or until timeout."""
-        logger.info("Waiting for index to update...")
+        _log_info("Waiting for index to update...")
         for _ in range(max_wait // 5):
             size = self.get_index_size(signal_type)
-            logger.debug(f"Index size: {size}")
+            _log_debug(f"Index size: {size}")
             if expected_size is None or size >= expected_size:
-                logger.info("Index likely updated.")
+                _log_info("Index likely updated.")
                 return
             time.sleep(5)
-        logger.warning("Timed out waiting for index update.")
+        _log_warning("Timed out waiting for index update.")
 
 
     def match_uploaded_files(self, files_to_send):
         """Match each uploaded file and print the response."""
-        logger.info("Sleeping 35 seconds to allow in-memory index cache to refresh...")
+        _log_info("Sleeping 35 seconds to allow in-memory index cache to refresh...")
         time.sleep(35)
         for match_file_path in files_to_send:
-            logger.debug(match_file_path)
+            _log_debug(match_file_path)
             match_resp = self.match_local_content(match_file_path)
-            logger.debug(json.dumps(match_resp, indent=2))
+            _log_debug(json.dumps(match_resp, indent=2))
 
     def compare_hashes(self, hash1, hash2, signal_type="clip") -> dict:
         url = f"{hma_app_url}/m/compare"
@@ -344,7 +355,7 @@ class Evaluator:
         Clears all tables and PostgreSQL large objects (where HMA stores indexes).
         """
         if not PSYCOPG2_AVAILABLE:
-            logger.warning("psycopg2 not available, cannot clear database")
+            _log_warning("psycopg2 not available, cannot clear database")
             return False
 
         db_host = os.getenv("POSTGRES_HOST", "hma-postgresql")
@@ -354,7 +365,7 @@ class Evaluator:
         db_name = os.getenv("POSTGRES_DB", "media_match")
 
         try:
-            logger.info("Clearing all data from database...")
+            _log_info("Clearing all data from database...")
             
             def clear_all_data():
                 """Helper to clear all data and large objects"""
@@ -421,19 +432,19 @@ class Evaluator:
                     time.sleep(2)  # Wait for fetcher to potentially add more data
                 deleted_counts = clear_all_data()
                 if attempt == 0:
-                    logger.info(f"Cleared: {deleted_counts}")
+                    _log_info(f"Cleared: {deleted_counts}")
                 elif sum(deleted_counts.values()) > 0:
-                    logger.info(f"Additional data cleared: {deleted_counts}")
+                    _log_info(f"Additional data cleared: {deleted_counts}")
                 else:
                     break  # No more data to clear
             
-            logger.info("✓ Database cleared successfully")
+            _log_info("✓ Database cleared successfully")
             return True
 
         except Exception as e:
-            logger.error(f"Failed to clear database: {e}")
+            _log_error(f"Failed to clear database: {e}")
             import traceback
-            logger.error(traceback.format_exc())
+            _log_error(traceback.format_exc())
             return False
 
     def cleanup_test_environment(self, signal_type="clip"):
@@ -441,7 +452,7 @@ class Evaluator:
         Clean up test environment by clearing all database data.
         This ensures complete isolation - no leftover indexes or data from previous runs.
         """
-        logger.info("Cleaning up test environment...")
+        _log_info("Cleaning up test environment...")
         
         if self.create_fresh_database():
             # Wait for HMA to process the changes
@@ -450,17 +461,17 @@ class Evaluator:
             # Verify index is empty
             index_size = self.get_index_size(signal_type)
             if index_size == 0:
-                logger.info(f"✓ {signal_type} index is empty")
+                _log_info(f"✓ {signal_type} index is empty")
             else:
-                logger.warning(f"Index size is {index_size}, expected 0")
+                _log_warning(f"Index size is {index_size}, expected 0")
             return True
         else:
-            logger.error("Failed to clear database")
+            _log_error("Failed to clear database")
             return False
 
 def run_all_tests():
     setup_logging("test")
-    logger.info("[STARTUP] Creating fresh database for test run...")
+    _log_info("[STARTUP] Creating fresh database for test run...")
     print("Running tests...")
     evaluator = Evaluator()
     evaluator.cleanup_test_environment(signal_type="clip")
@@ -470,7 +481,7 @@ def run_all_tests():
     
     for i, fname in enumerate(test_files, 1):
         print(f"[{i}/{len(test_files)}] {fname}")
-        logger.info(f"Running {fname} ...")
+        _log_info(f"Running {fname} ...")
         result = subprocess.run(
             ["python", os.path.join(test_dir, fname)],
             capture_output=True,
@@ -479,11 +490,11 @@ def run_all_tests():
         )
         # Log all output to file
         if result.stdout:
-            logger.debug(result.stdout)
+            _log_debug(result.stdout)
         if result.stderr:
-            logger.error(result.stderr)
+            _log_error(result.stderr)
         if result.returncode != 0:
-            logger.error(f"Test {fname} failed with return code {result.returncode}")
+            _log_error(f"Test {fname} failed with return code {result.returncode}")
             raise subprocess.CalledProcessError(result.returncode, fname)
     
     print(f"✓ All tests completed. Logs: {log_file}")
@@ -494,7 +505,7 @@ def main():
     setup_logging(test_run_type)
     
     if eval_mode == "smoke":
-        logger.info("[STARTUP] Creating fresh database for smoke test...")
+        _log_info("[STARTUP] Creating fresh database for smoke test...")
         print("Running smoke test...")
         evaluator = Evaluator()
         evaluator.cleanup_test_environment(signal_type="clip")
@@ -505,7 +516,7 @@ def main():
 
         files_to_send = [str(file) for file in image_input_dir.iterdir() if file.is_file()]
         index_size_before = evaluator.get_index_size("clip")
-        logger.info(f"Starting index size: {index_size_before}")
+        _log_info(f"Starting index size: {index_size_before}")
         print(f"Uploading {len(files_to_send)} files...")
         evaluator.upload_files_to_bank(files_to_send, BANK_NAME)
         expected_size = index_size_before + len(files_to_send)

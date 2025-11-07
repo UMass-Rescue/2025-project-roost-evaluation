@@ -333,6 +333,19 @@ class Evaluator:
                 cur.execute("SELECT lo_unlink(oid) FROM pg_largeobject_metadata;")
                 large_object_count = cur.rowcount
                 
+                # Reset all sequences so IDs start from 1
+                sequences = [
+                    'bank_content_id_seq',
+                    'bank_id_seq',
+                    'exchange_data_id_seq',
+                    'exchange_id_seq',
+                    'exchange_api_config_id_seq',
+                    'signal_index_id_seq',
+                    'signal_type_override_id_seq'
+                ]
+                for seq in sequences:
+                    cur.execute(f"SELECT setval('{seq}', 1, false);")
+                
                 cur.close()
                 conn.close()
                 

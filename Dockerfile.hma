@@ -4,7 +4,7 @@
 FROM python:3.13-bullseye as builder
 
 # Accept build argument for commit hash
-ARG THREATEXCHANGE_COMMIT=aff3f3b8
+ARG THREATEXCHANGE_COMMIT=2e5f23f
 
 # Clone ThreatExchange at the specific commit
 RUN apt-get update && apt-get install -y git patch && rm -rf /var/lib/apt/lists/*
@@ -12,12 +12,12 @@ RUN apt-get update && apt-get install -y git patch && rm -rf /var/lib/apt/lists/
 WORKDIR /threatexchange
 
 # Copy patch file
-COPY resources/patches/hma.patch /tmp/hma.patch
+COPY resources/patches/main-vs-development.patch /tmp/hma.patch
 
 # Clone and checkout the specific commit, then apply patch
 RUN git clone https://github.com/facebook/ThreatExchange.git . && \
     git checkout ${THREATEXCHANGE_COMMIT} && \
-    git apply --ignore-whitespace /tmp/hma.patch && \
+    (git apply --ignore-whitespace /tmp/hma.patch || git apply --reject --whitespace=fix /tmp/hma.patch) && \
     (grep -q "lookup_topk\|lookup_threshold" hasher-matcher-actioner/src/OpenMediaMatch/blueprints/matching.py || \
     (echo "ERROR: Patch changes not found in matching.py - patch may not be compatible with this commit" && exit 1)) && \
     rm -rf .git /tmp/hma.patch

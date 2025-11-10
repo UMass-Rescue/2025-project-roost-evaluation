@@ -4,7 +4,7 @@
 FROM python:3.13-bullseye as builder
 
 # Accept build argument for commit hash
-ARG THREATEXCHANGE_COMMIT=aff3f3b8
+ARG THREATEXCHANGE_COMMIT=2e5f23f
 
 # Clone ThreatExchange at the specific commit
 RUN apt-get update && apt-get install -y git patch && rm -rf /var/lib/apt/lists/*

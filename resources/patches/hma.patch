@@ -1,15 +1,8 @@
 diff --git a/.github/workflows/hma-ci.yaml b/.github/workflows/hma-ci.yaml
-index 00cff0e0..87fb8788 100644
+index 00cff0e0..ae5d513f 100644
 --- a/.github/workflows/hma-ci.yaml
 +++ b/.github/workflows/hma-ci.yaml
-@@ -5,12 +5,14 @@ on:
-   push:
-     branches:
-       - main
-+      - development
-     paths:
-       - "hasher-matcher-actioner/**"
-       - ".github/workflows/hma-ci.yaml"
+@@ -11,6 +11,7 @@ on:
    pull_request:
      branches:
        - main
@@ -18,10 +11,10 @@ index 00cff0e0..87fb8788 100644
        - "hasher-matcher-actioner/**"
        - ".github/workflows/hma-ci.yaml"
 diff --git a/hasher-matcher-actioner/src/OpenMediaMatch/blueprints/matching.py b/hasher-matcher-actioner/src/OpenMediaMatch/blueprints/matching.py
-index 7d94e3ed..a214ea86 100644
+index 7d94e3ed..2cad576b 100644
 --- a/hasher-matcher-actioner/src/OpenMediaMatch/blueprints/matching.py
 +++ b/hasher-matcher-actioner/src/OpenMediaMatch/blueprints/matching.py
-@@ -45,6 +45,13 @@ class MatchWithDistance(t.TypedDict):
+@@ -45,6 +45,12 @@ class MatchWithDistance(t.TypedDict):
      distance: str
  
  
@@ -31,13 +24,12 @@ index 7d94e3ed..a214ea86 100644
 +    signal: str
 +
 +
-+
  TMatchByBank = t.Mapping[str, t.Sequence[MatchWithDistance]]
  TBankMatchBySignalType = t.Mapping[str, TMatchByBank]
  
-@@ -151,6 +158,78 @@ def raw_lookup():
- 
+@@ -152,6 +158,81 @@ def raw_lookup():
      return {"matches": lookup_signal_func(signal, signal_type_name, requested_banks)}
+ 
  
 +@bp.route("/lookup_threshold")
 +def lookup_threshold():
@@ -50,13 +42,16 @@ index 7d94e3ed..a214ea86 100644
 +    Input:
 +     * Signal type (hash type)
 +     * Signal value (the hash)
-+     * Threshold - maximum distance for matches (required)
++     * Threshold (int) - maximum distance for matches (required)
 +    Output:
 +     * List of matching with content_id, distance, and signal values
 +    """
 +    signal = require_request_param("signal")
 +    signal_type_name = require_request_param("signal_type")
-+    threshold = require_request_param("threshold")
++    try:
++        threshold = int(require_request_param("threshold"))
++    except ValueError:
++        abort(400, "threshold must be an integer")
 +
 +    results = query_index_threshold(signal, signal_type_name, threshold)
 +    storage = get_storage()
@@ -111,15 +106,15 @@ index 7d94e3ed..a214ea86 100644
 +    return {"matches": matches}
 +
 +
- 
  def query_index(
      signal: str, signal_type_name: str
-@@ -172,6 +251,63 @@ def query_index(
-     current_app.logger.debug("[lookup_signal] query complete")
+ ) -> t.Sequence[IndexMatchUntyped[SignalSimilarityInfo, int]]:
+@@ -173,6 +254,58 @@ def query_index(
      return results
  
+ 
 +def query_index_threshold(
-+    signal: str, signal_type_name: str, threshold: str
++    signal: str, signal_type_name: str, threshold: int
 +) -> t.Sequence[IndexMatchUntyped[SignalSimilarityInfo, int]]:
 +    storage = get_storage()
 +    signal_type = _validate_and_transform_signal_type(signal_type_name, storage)
@@ -128,11 +123,6 @@ index 7d94e3ed..a214ea86 100644
 +        signal = signal_type.validate_signal_str(signal)
 +    except Exception as e:
 +        abort(400, f"invalid signal: {e}")
-+
-+    try:
-+        threshold_int = int(threshold)
-+    except ValueError:
-+        abort(400, f"invalid threshold: must be an integer")
 +
 +    index = _get_index(signal_type)
 +
@@ -144,7 +134,7 @@ index 7d94e3ed..a214ea86 100644
 +            f"Signal type '{signal_type_name}' does not support query_threshold method",
 +        )
 +    current_app.logger.debug("[lookup_signal_threshold] querying index")
-+    results = index.query_threshold(signal, threshold_int)  # type: ignore[attr-defined]
++    results = index.query_threshold(signal, threshold)  # type: ignore[attr-defined]
 +    current_app.logger.debug("[lookup_signal_threshold] query complete")
 +    return results
 +
@@ -175,11 +165,11 @@ index 7d94e3ed..a214ea86 100644
 +    return results
 +
 +
- 
  def lookup_signal(
      signal: str, signal_type_name: str, banks: t.Optional[t.Set[str]] = None
+ ) -> list[int]:
 diff --git a/hasher-matcher-actioner/src/OpenMediaMatch/tests/test_match_api.py b/hasher-matcher-actioner/src/OpenMediaMatch/tests/test_match_api.py
-index 3a558d52..93f9d21e 100644
+index 3a558d52..5c8aad23 100644
 --- a/hasher-matcher-actioner/src/OpenMediaMatch/tests/test_match_api.py
 +++ b/hasher-matcher-actioner/src/OpenMediaMatch/tests/test_match_api.py
 @@ -1,12 +1,14 @@
@@ -197,7 +187,7 @@ index 3a558d52..93f9d21e 100644
  from threatexchange.exchanges.impl.static_sample import StaticSampleSignalExchangeAPI
  
  from OpenMediaMatch.tests.utils import app
-@@ -34,9 +36,7 @@ def client_with_sample_data(app) -> FlaskClient:
+@@ -34,9 +36,51 @@ def client_with_sample_data(app) -> FlaskClient:
      fetcher.fetch_all(storage, storage.get_signal_type_configs())
      build_index.build_all_indices(storage, storage, storage)
  
@@ -205,13 +195,6 @@ index 3a558d52..93f9d21e 100644
 -    assert client.get("/status").status_code == 200
 -    return client
 +    return app.test_client()
- 
- 
- def test_raw_lookups(client_with_sample_data: FlaskClient):
-@@ -102,6 +102,224 @@ def test_lookups(client_with_sample_data: FlaskClient):
-             assert "distance" in match
- 
- 
 +
 +
 +# Helper functions for mock-based tests
@@ -228,7 +211,7 @@ index 3a558d52..93f9d21e 100644
 +def _create_mock_index(
 +    topk_results: t.Optional[t.List[IndexMatchUntyped]] = None,
 +    threshold_behavior: t.Optional[
-+        t.Callable[[t.Any, str], t.List[IndexMatchUntyped]]
++        t.Callable[[t.Any, int], t.List[IndexMatchUntyped]]
 +    ] = None,
 +) -> MagicMock:
 +    """
@@ -256,8 +239,13 @@ index 3a558d52..93f9d21e 100644
 +        1002: {signal_type_name: "signal_2"},
 +        1003: {signal_type_name: "signal_3"},
 +    }
-+
-+
+ 
+ 
+ def test_raw_lookups(client_with_sample_data: FlaskClient):
+@@ -102,6 +146,178 @@ def test_lookups(client_with_sample_data: FlaskClient):
+             assert "distance" in match
+ 
+ 
 +def test_lookup_topk(client_with_sample_data: FlaskClient):
 +    """Test the lookup_topk endpoint."""
 +    client = client_with_sample_data
@@ -374,8 +362,8 @@ index 3a558d52..93f9d21e 100644
 +    mock_signal_type_name = "mock_external_signal"
 +    mock_signal_value = "abcd1234ef5678901234567890abcdef"
 +
-+    def threshold_behavior(sig: t.Any, thresh: str) -> t.List[IndexMatchUntyped]:
-+        if thresh == "50":
++    def threshold_behavior(sig: t.Any, thresh: int) -> t.List[IndexMatchUntyped]:
++        if thresh == 50:
 +            return [
 +                IndexMatchUntyped(
 +                    metadata=1001, similarity_info=MagicMock(pretty_str=lambda: "0")
@@ -433,14 +421,3 @@ index 3a558d52..93f9d21e 100644
  @pytest.fixture()
  def client_with_multi_bank_data(app) -> FlaskClient:
      """Fixture that sets up multiple banks with sample data for testing bank filtering."""
-@@ -121,9 +339,7 @@ def client_with_multi_bank_data(app) -> FlaskClient:
-     # Build indices
-     build_index.build_all_indices(storage, storage, storage)
- 
--    client = app.test_client()
--    assert client.get("/status").status_code == 200
--    return client
-+    return app.test_client()
- 
- 
- def test_raw_lookup_with_bank_filter(client_with_multi_bank_data: FlaskClient):

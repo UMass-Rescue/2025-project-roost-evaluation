@@ -7,7 +7,7 @@ from datetime import datetime
 from evaluate import image_input_dir
 from tests.path_id_store import PathIdStore
 
-ANON_ENV_FLAG = "ANONYMIZE_IMAGE_PATHS"
+ANON_ENV_FLAG = "DEANONYMIZE_IMAGE_PATHS"
 
 def get_image_files(image_dir=None):
     """Return sorted list of image file paths from the given directory (default: resources/images or $IMAGE_INPUT_DIR)."""
@@ -29,13 +29,15 @@ def get_results_dir():
     timestamp = os.getenv("TEST_RUN_TIMESTAMP")
     if not timestamp:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    
-    results_dir = Path("evaluations_results") / timestamp
+
+    output_root = Path(os.getenv("OUTPUT_DIR", "./results"))
+    results_dir = output_root / "evaluation_results" / timestamp
     results_dir.mkdir(parents=True, exist_ok=True)
     return results_dir
 
 def _should_anonymize() -> bool:
-    return os.getenv(ANON_ENV_FLAG, "").strip() == "1"
+    # Default ON; set DEANONYMIZE_IMAGE_PATHS=1 to disable anonymization
+    return os.getenv(ANON_ENV_FLAG, "").strip() != "1"
 
 def _collect_image_paths(results: list[dict]) -> set[str]:
     paths: set[str] = set()

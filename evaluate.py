@@ -32,7 +32,8 @@ def setup_logging(test_run_type="test"):
     global logger, log_file
     
     # Create logs directory
-    logs_dir = Path("test_run_logs")
+    output_root = Path(os.getenv("OUTPUT_DIR", "./results"))
+    logs_dir = output_root / "test_run_logs"
     logs_dir.mkdir(exist_ok=True)
     
     # Generate log filename: TestRunType_Date_Timestarted

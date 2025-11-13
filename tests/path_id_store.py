@@ -26,7 +26,11 @@ class PathIdStore:
     @classmethod
     def from_env(cls) -> "PathIdStore":
         path = os.getenv("ANON_ID_MAP_FILEPATH")
-        return cls(path.strip() if path else None)
+        if path and path.strip():
+            return cls(path.strip())
+        output_dir = os.getenv("OUTPUT_DIR", "./results")
+        default_path = Path(output_dir) / "file_to_id_map" / "anon_id_map.json"
+        return cls(str(default_path))
 
     @property
     def has_persistence(self) -> bool:

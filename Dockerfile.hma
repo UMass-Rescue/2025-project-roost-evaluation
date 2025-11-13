@@ -1,0 +1,58 @@
+# Dockerfile to build HMA from ThreatExchange repository at a specific commit
+# ThreatExchange commit hash (compatible with hma.patch): aff3f3b8
+
+FROM python:3.13-bullseye as builder
+
+# Accept build argument for commit hash
+ARG THREATEXCHANGE_COMMIT=2e5f23f
+
+# Clone ThreatExchange at the specific commit
+RUN apt-get update && apt-get install -y git patch && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /threatexchange
+
+# Copy patch file
+COPY resources/patches/hma.patch /tmp/hma.patch
+
+# Clone and checkout the specific commit, then apply patch
+RUN git clone https://github.com/facebook/ThreatExchange.git . && \
+    git checkout ${THREATEXCHANGE_COMMIT} && \
+    git apply --ignore-whitespace /tmp/hma.patch && \
+    (grep -q "lookup_topk\|lookup_threshold" hasher-matcher-actioner/src/OpenMediaMatch/blueprints/matching.py || \
+    (echo "ERROR: Patch changes not found in matching.py - patch may not be compatible with this commit" && exit 1)) && \
+    rm -rf .git /tmp/hma.patch
+
+# Build stage - build HMA from the cloned source
+FROM python:3.13-bullseye
+
+WORKDIR /app
+
+# Install system dependencies for CLIP (torch, etc.)
+RUN apt-get update && apt-get install -y \
+    git \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy the HMA source from the builder
+COPY --from=builder /threatexchange/hasher-matcher-actioner/pyproject.toml ./
+RUN pip install .[prod]
+
+# Copy HMA source (needed for threatexchange command and CLIP extension)
+COPY --from=builder /threatexchange/hasher-matcher-actioner/src /app
+COPY --from=builder /threatexchange/hasher-matcher-actioner/scripts/ /app/scripts
+
+# Install CLIP extension (after HMA is installed and source is available)
+RUN git clone -b main https://github.com/UMass-Rescue/tx-extension-clip.git /app/tx-extension-clip && \
+    pip install -e /app/tx-extension-clip && \
+    python -c "from tx_extension_clip import CLIPSignal; print('✓ CLIP extension installed and verified')" || \
+    (echo "ERROR: CLIP extension installation or import failed" && exit 1)
+
+# Copy reference configs
+COPY --from=builder /threatexchange/hasher-matcher-actioner/reference_omm_configs/ /reference_configs
+
+# Copy custom OMM config with CLIP support
+COPY omm_config.py /reference_configs/development_omm_config.py
+
+EXPOSE 5100
+CMD ["gunicorn", "--bind", "0.0.0.0:5100", "--timeout", "300", "--workers", "1", "OpenMediaMatch.app:create_app()"]
+

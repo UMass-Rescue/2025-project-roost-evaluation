@@ -88,7 +88,8 @@ All test runs create detailed logs in `test_run_logs/` folder:
 
 ### Results Anonymization (optional)
 - `ANONYMIZE_IMAGE_PATHS`: Set to `1` to replace image paths in results with simple index IDs ("1", "2", ...).
-- `ANON_ID_MAP_FILEPATH`: If set, also writes a private JSON mapping `{ "<full_path>": "<id>" }` to this path. **DON'T SHARE THIS FILE** if you don't want to leak the original image paths.
+- `ANON_ID_MAP_FILEPATH`: If set, uses this file as a persistent path→ID store: loads existing mappings (if present) and updates it after runs to keep IDs stable across runs. The file contains `{ "<full_path>": "<id>" }`. **DON'T SHARE THIS FILE** if you don't want to leak the original image paths.
+- If `ANON_ID_MAP_FILEPATH` is not set, anonymization still works but IDs are in-memory only for the current run (not stable across runs).
 
 ## Results
 
@@ -113,3 +114,7 @@ curl http://localhost:5005/c/banks
 # Verify database
 docker compose exec hma-postgresql psql -U postgres -d media_match -c "\dt"
 ```
+
+## Description of the tests
+
+Refer to [EVALUATION_DESCRIPTION.md](EVALUATION_DESCRIPTION.md) for an overview of the tests.

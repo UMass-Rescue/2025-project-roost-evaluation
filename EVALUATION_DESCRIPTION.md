@@ -36,5 +36,6 @@ Notes:
 
 Anonymization (optional):
 - Set `ANONYMIZE_IMAGE_PATHS=1` to replace image paths in results with simple index IDs ("1", "2", ...).
-- Optionally set `ANON_ID_MAP_FILEPATH` to also write a private JSON mapping of `{ "<full_path>": "<id>" }`. **DON'T SHARE THIS FILE** if you don't want to leak the original image paths.
+- Optionally set `ANON_ID_MAP_FILEPATH` to persist IDs across runs: the file is loaded if it exists and updated after tests. It contains `{ "<full_path>": "<id>" }`. **DON'T SHARE THIS FILE** if you don't want to leak the original image paths.
+- If `ANON_ID_MAP_FILEPATH` is not set, anonymized IDs are assigned in-memory for the current run only (not stable across runs).
 

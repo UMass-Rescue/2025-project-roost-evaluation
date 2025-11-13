@@ -34,3 +34,7 @@ Notes:
 - All three tests discover images automatically and write results to a JSON file (override with `OUTPUT_FILE`).
 - Set `IMAGE_INPUT_DIR` to point the tests at a different directory of images.
 
+Anonymization (optional):
+- Set `ANONYMIZE_IMAGE_PATHS=1` to replace image paths in results with simple index IDs ("1", "2", ...).
+- Optionally set `ANON_ID_MAP_FILEPATH` to also write a private JSON mapping of `{ "<full_path>": "<id>" }`. **DON'T SHARE THIS FILE** if you don't want to leak the original image paths.
+

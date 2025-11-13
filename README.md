@@ -86,6 +86,10 @@ All test runs create detailed logs in `test_run_logs/` folder:
 - `HMA_HOST`: `hma-app` (internal container name)
 - `HMA_PORT`: `5100` (internal container port)
 
+### Results Anonymization (optional)
+- `ANONYMIZE_IMAGE_PATHS`: Set to `1` to replace image paths in results with simple index IDs ("1", "2", ...).
+- `ANON_ID_MAP_FILEPATH`: If set, also writes a private JSON mapping `{ "<full_path>": "<id>" }` to this path. **DON'T SHARE THIS FILE** if you don't want to leak the original image paths.
+
 ## Results
 
 Test results are saved as JSON files in the project root:

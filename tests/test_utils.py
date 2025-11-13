@@ -5,9 +5,9 @@ import numpy as np
 from pathlib import Path
 from datetime import datetime
 from evaluate import image_input_dir
+from tests.path_id_store import PathIdStore
 
 ANON_ENV_FLAG = "ANONYMIZE_IMAGE_PATHS"
-ANON_MAP_ENV_PATH = "ANON_ID_MAP_FILEPATH"
 
 def get_image_files(image_dir=None):
     """Return sorted list of image file paths from the given directory (default: resources/images or $IMAGE_INPUT_DIR)."""
@@ -37,10 +37,6 @@ def get_results_dir():
 def _should_anonymize() -> bool:
     return os.getenv(ANON_ENV_FLAG, "").strip() == "1"
 
-def _anon_map_filepath() -> str | None:
-    value = os.getenv(ANON_MAP_ENV_PATH)
-    return value.strip() if value else None
-
 def _collect_image_paths(results: list[dict]) -> set[str]:
     paths: set[str] = set()
     for item in results:
@@ -52,16 +48,9 @@ def _collect_image_paths(results: list[dict]) -> set[str]:
                 paths.add(val)
     return paths
 
-def _build_index_id_map(paths: set[str]) -> dict[str, str]:
-    sorted_paths = sorted(paths)
-    return {p: str(i) for i, p in enumerate(sorted_paths, start=1)}
-
 def _anonymize_results(results: list[dict], id_map: dict[str, str]) -> list[dict]:
     anonymized: list[dict] = []
     for item in results:
-        if not isinstance(item, dict):
-            anonymized.append(item)
-            continue
         new_item = item.copy()
         for key in ("image", "image1", "image2"):
             val = new_item.get(key)
@@ -88,14 +77,12 @@ def write_results(results, filename):
     if _should_anonymize():
         _validate_results_for_anonymization(results)
         paths = _collect_image_paths(results)
-        id_map = _build_index_id_map(paths)
+        # Build IDs using persistent store if ANON_ID_MAP_FILEPATH is set, else in-memory
+        store = PathIdStore.from_env()
+        id_map = store.get_ids_for_paths(paths)
         results_to_write = _anonymize_results(results, id_map)
-        map_path = _anon_map_filepath()
-        if map_path:
-            map_path_obj = Path(map_path)
-            map_path_obj.parent.mkdir(parents=True, exist_ok=True)
-            with open(map_path_obj, 'w') as map_file:
-                json.dump(id_map, map_file, indent=2)
+        if store.has_persistence:
+            store.save()
 
     with open(output_path, 'w') as f:
         json.dump(results_to_write, f, indent=2)

@@ -31,11 +31,14 @@
 - **Progress/Logging**: `tqdm` shows progress; detailed messages go to the shared logger.
 
 Notes:
-- All three tests discover images automatically and write results to a JSON file (override with `OUTPUT_FILE`).
+- All three tests discover images automatically and write results under `OUTPUT_DIR/evaluation_results/<timestamp>/` (override filename with `OUTPUT_FILE`).
 - Set `IMAGE_INPUT_DIR` to point the tests at a different directory of images.
 
-Anonymization (optional):
-- Set `ANONYMIZE_IMAGE_PATHS=1` to replace image paths in results with simple index IDs ("1", "2", ...).
-- Optionally set `ANON_ID_MAP_FILEPATH` to persist IDs across runs: the file is loaded if it exists and updated after tests. It contains `{ "<full_path>": "<id>" }`. **DON'T SHARE THIS FILE** if you don't want to leak the original image paths.
-- If `ANON_ID_MAP_FILEPATH` is not set, anonymized IDs are assigned in-memory for the current run only (not stable across runs).
+Anonymization and outputs:
+- Anonymization is ON by default. Set `DEANONYMIZE_IMAGE_PATHS=1` to disable.
+- `OUTPUT_DIR` controls all outputs (default `./results`):
+  - Results JSONs: `OUTPUT_DIR/evaluation_results/<timestamp>/`
+  - Logs: `OUTPUT_DIR/test_run_logs/`
+  - Mapping file: `OUTPUT_DIR/file_to_id_map/anon_id_map.json`
+- `ANON_ID_MAP_FILEPATH` optionally overrides only the mapping file path. The mapping contains `{ "<full_path>": "<id>" }`. **DON'T SHARE THIS FILE** if you don't want to leak original image paths.
 

@@ -53,7 +53,7 @@ docker compose run --rm \
 
 ## Test Logs
 
-All test runs create detailed logs in `test_run_logs/` folder:
+All test runs create detailed logs in `OUTPUT_DIR/test_run_logs/` (default `./results/test_run_logs`):
 - Format: `{test_run_type}_{date}_{time}.log` (e.g., `smoke_20251107_115430.log`)
 - Terminal shows minimal progress output
 - Full logs with timestamps saved to files
@@ -86,14 +86,17 @@ All test runs create detailed logs in `test_run_logs/` folder:
 - `HMA_HOST`: `hma-app` (internal container name)
 - `HMA_PORT`: `5100` (internal container port)
 
-### Results Anonymization (optional)
-- `ANONYMIZE_IMAGE_PATHS`: Set to `1` to replace image paths in results with simple index IDs ("1", "2", ...).
-- `ANON_ID_MAP_FILEPATH`: If set, uses this file as a persistent path→ID store: loads existing mappings (if present) and updates it after runs to keep IDs stable across runs. The file contains `{ "<full_path>": "<id>" }`. **DON'T SHARE THIS FILE** if you don't want to leak the original image paths.
-- If `ANON_ID_MAP_FILEPATH` is not set, anonymization still works but IDs are in-memory only for the current run (not stable across runs).
+### Output and Anonymization
+- `OUTPUT_DIR`: Root directory for all outputs (default: `./results`).
+  - Results: `OUTPUT_DIR/evaluation_results/<timestamp>/...`
+  - Logs: `OUTPUT_DIR/test_run_logs/`
+  - Mapping: `OUTPUT_DIR/file_to_id_map/anon_id_map.json` (default if not overridden)
+- `DEANONYMIZE_IMAGE_PATHS`: Set to `1` to disable anonymization (filename anonymization is ON by default).
+- `ANON_ID_MAP_FILEPATH`: Optional override for the mapping file path. If set, uses this as a persistent path→ID store (loads existing mappings and updates after runs). The file contains `{ "<full_path>": "<id>" }`. **DON'T SHARE THIS FILE** if you don't want to leak original image paths.
 
 ## Results
 
-Test results are saved as JSON files in the project root:
+Test results are saved under `OUTPUT_DIR/evaluation_results/<timestamp>/` (default `./results/evaluation_results/<timestamp>/`):
 - `pairwise_clip_compare.json`
 - `topk_test_results.json`
 - `threshold_test_results.json`

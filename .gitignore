@@ -3,3 +3,6 @@ evaluations_results/
 results/*
 __pycache__/*
 tests/__pycache__/*
+.vscode/*
+.venv/*
+.env

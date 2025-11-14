@@ -51,6 +51,16 @@ docker compose run --rm \
   evaluation
 ```
 
+### Local development (without docker run)
+- Ensure services are up (step 2). The compose file exposes:
+  - HMA on host port `5005`
+  - PostgreSQL on host port `55432`
+- Then you can run locally via the Makefile:
+```bash
+make smoke-test       # Uses localhost:5005 and localhost:55432
+make run-evaluation   # Runs all tests locally
+```
+
 ## Test Logs
 
 All test runs create detailed logs in `OUTPUT_DIR/test_run_logs/` (default `./results/test_run_logs`):

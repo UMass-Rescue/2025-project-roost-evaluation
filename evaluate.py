@@ -189,13 +189,13 @@ class Evaluator:
             }
         
         signal = hasher_resp[signal_type]
-        params = {
+        data = {
             'signal_type': signal_type,
             'signal': signal
         }
    
         try:
-            response = requests.get(f"{match_url}", params=params)
+            response = requests.post(f"{match_url}", json=data)
             if response.ok:
                 result = response.json()
                 #print(json.dumps(result, indent=2))
@@ -231,14 +231,14 @@ class Evaluator:
             }
         
         signal = hasher_resp[signal_type]
-        params = {
+        data = {
             'signal_type': signal_type,
             'signal': signal,
             'k': k
         }
 
         try:
-            response = requests.get(f"{match_url_topk}", params=params)
+            response = requests.post(f"{match_url_topk}", json=data)
             if response.ok:
                 result = response.json()
                 return {
@@ -272,14 +272,14 @@ class Evaluator:
             }
         
         signal = hasher_resp[signal_type]
-        params = {
+        data = {
             'signal_type': signal_type,
             'signal': signal,
             'threshold': threshold
         }
 
         try:
-            response = requests.get(f"{match_url_threshold}", params=params)
+            response = requests.post(f"{match_url_threshold}", json=data)
             if response.ok:
                 result = response.json()
                 return {

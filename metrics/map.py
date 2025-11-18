@@ -9,6 +9,7 @@ from typing import Dict, List, Set, Tuple, Optional
 # Path normalization helpers
 # ----------------------------
 
+
 def normalize_label_path(path_str: str) -> str:
     p = path_str.replace("\\", "/")
     if p.startswith("./"):
@@ -35,6 +36,7 @@ def normalize_pairwise_path(path_str: str) -> str:
 # ----------------------------
 # I/O helpers
 # ----------------------------
+
 
 def load_labels(labels_path: str) -> Dict[str, Set[str]]:
     with open(labels_path, "r") as f:
@@ -66,7 +68,9 @@ def load_pairwise(pairwise_path: str) -> List[dict]:
         if not isinstance(item, dict):
             raise ValueError(f"Pairwise entry at index {idx} must be a JSON object.")
         if "image1" not in item or "image2" not in item:
-            raise ValueError(f"Pairwise entry at index {idx} must have 'image1' and 'image2'.")
+            raise ValueError(
+                f"Pairwise entry at index {idx} must have 'image1' and 'image2'."
+            )
         a = item.get("image1")
         b = item.get("image2")
         if not isinstance(a, str) or not isinstance(b, str):
@@ -96,7 +100,9 @@ def load_anon_id_map(anon_map_path: Optional[str]) -> Optional[Dict[str, str]]:
         if not isinstance(path_str, str) or not isinstance(anon_id, str):
             raise ValueError("Anonymous ID map must use string keys and string values.")
         if anon_id in id_to_path:
-            raise ValueError(f"Anonymous ID map must be 1:1; {anon_id} is used more than once.")
+            raise ValueError(
+                f"Anonymous ID map must be 1:1; {anon_id} is used more than once."
+            )
         id_to_path[anon_id] = path_str
     return id_to_path
 
@@ -105,7 +111,10 @@ def load_anon_id_map(anon_map_path: Optional[str]) -> Optional[Dict[str, str]]:
 # Validation
 # ----------------------------
 
-def collect_pairwise_paths(entries: List[dict], id_to_path: Optional[Dict[str, str]] = None) -> Set[str]:
+
+def collect_pairwise_paths(
+    entries: List[dict], id_to_path: Optional[Dict[str, str]] = None
+) -> Set[str]:
     """
     Collect all normalized image paths present in pairwise entries, applying
     anon-ID mapping if provided.
@@ -122,7 +131,11 @@ def collect_pairwise_paths(entries: List[dict], id_to_path: Optional[Dict[str, s
     return found
 
 
-def validate_inputs(series_to_images: Dict[str, Set[str]], pairwise_entries: List[dict], id_to_path: Optional[Dict[str, str]] = None) -> None:
+def validate_inputs(
+    series_to_images: Dict[str, Set[str]],
+    pairwise_entries: List[dict],
+    id_to_path: Optional[Dict[str, str]] = None,
+) -> None:
     """
     Ensure all labeled images are present in the pairwise results (as either image1 or image2),
     accounting for '/build/' prefix on container paths.
@@ -148,6 +161,7 @@ def validate_inputs(series_to_images: Dict[str, Set[str]], pairwise_entries: Lis
 # Distance handling and rankings
 # ----------------------------
 
+
 def extract_distance(value) -> float:
     """
     Handle distance provided as a number or as an object like { \"distance\": num }.
@@ -160,7 +174,9 @@ def extract_distance(value) -> float:
     raise ValueError(f"Unsupported distance format: {value!r}")
 
 
-def build_rankings(entries: List[dict], id_to_path: Optional[Dict[str, str]] = None) -> Dict[str, List[Tuple[str, float]]]:
+def build_rankings(
+    entries: List[dict], id_to_path: Optional[Dict[str, str]] = None
+) -> Dict[str, List[Tuple[str, float]]]:
     """
     Build a neighbor ranking for each image:
     - For each pair (a, b, d), add (b, d) to a's list and (a, d) to b's list.
@@ -202,6 +218,7 @@ def build_rankings(entries: List[dict], id_to_path: Optional[Dict[str, str]] = N
 # ----------------------------
 # AP / mAP computation
 # ----------------------------
+
 
 def average_precision_at_k(preds: List[str], positives: Set[str], k: int) -> float:
     """
@@ -285,7 +302,10 @@ def compute_series_map(
 # Output
 # ----------------------------
 
-def write_series_map_csv(series_to_map: Dict[str, List[float]], output_csv: str) -> None:
+
+def write_series_map_csv(
+    series_to_map: Dict[str, List[float]], output_csv: str
+) -> None:
     out_path = Path(output_csv)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     # Determine header size (max k)
@@ -318,12 +338,27 @@ def write_series_map_csv(series_to_map: Dict[str, List[float]], output_csv: str)
 # Main
 # ----------------------------
 
+
 def main():
-    parser = argparse.ArgumentParser(description="Compute mAP@k from pairwise image distances and series labels.")
-    parser.add_argument("--labels", required=True, help="Path to labels JSON (series -> list of image paths).")
-    parser.add_argument("--pairwise", required=True, help="Path to pairwise results JSON from pairwise_test.py.")
+    parser = argparse.ArgumentParser(
+        description="Compute mAP@k from pairwise image distances and series labels."
+    )
+    parser.add_argument(
+        "--labels",
+        required=True,
+        help="Path to labels JSON (series -> list of image paths).",
+    )
+    parser.add_argument(
+        "--pairwise",
+        required=True,
+        help="Path to pairwise results JSON from pairwise_test.py.",
+    )
     parser.add_argument("--output_csv", required=True, help="Output CSV path.")
-    parser.add_argument("--anon_map", required=False, help="Optional path to anon ID map JSON ({path: id}); used to map IDs back to paths.")
+    parser.add_argument(
+        "--anon_map",
+        required=False,
+        help="Optional path to anon ID map JSON ({path: id}); used to map IDs back to paths.",
+    )
     args = parser.parse_args()
 
     series_to_images = load_labels(args.labels)
@@ -343,5 +378,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-

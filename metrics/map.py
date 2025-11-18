@@ -154,6 +154,9 @@ def extract_distance(value) -> float:
     """
     if isinstance(value, (int, float)):
         return float(value)
+    if isinstance(value, dict):
+        if isinstance(value["distance"], (int, float)):
+            return float(value["distance"])
     raise ValueError(f"Unsupported distance format: {value!r}")
 
 

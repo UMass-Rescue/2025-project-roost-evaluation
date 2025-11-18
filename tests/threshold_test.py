@@ -7,15 +7,41 @@ from evaluate import Evaluator, get_logger, _log_info, _log_debug, _log_warning
 
 OUTPUT_FILE = os.getenv("OUTPUT_FILE", "threshold_test_results.json")
 SIGNAL_TYPE = "clip_float"
-THRESHOLD_MAX = int(os.getenv("THRESHOLD_MAX", 100))
-THRESHOLD_STEP = int(os.getenv("THRESHOLD_STEP", 20))
+
+# Different threshold configurations for different signal types
+# PDQ and CLIP use integers, CLIP_FLOAT uses floats (0.0-1.0)
+INT_CONFIG = {
+    "max": int(os.getenv("THRESHOLD_MAX_INT", "100")),
+    "step": int(os.getenv("THRESHOLD_STEP_INT", "20")),
+    "type": "int"
+}
+
+THRESHOLD_CONFIG = {
+    "pdq": INT_CONFIG,
+    "clip": INT_CONFIG,
+    "clip_float": {
+        "max": float(os.getenv("THRESHOLD_MAX_FLOAT", "1.0")),
+        "step": float(os.getenv("THRESHOLD_STEP_FLOAT", "0.2")),
+        "start": float(os.getenv("THRESHOLD_START_FLOAT", "0.1")),  # Don't start at 0.0
+        "type": "float"
+    }
+}
 
 def main():
     # Use existing logger if available, otherwise create a simple one
     logger = get_logger()
     evaluator = Evaluator()
     image_files = get_image_files()
-    thresholds = range(0, THRESHOLD_MAX, THRESHOLD_STEP)
+    
+    # Get threshold configuration for this signal type
+    config = THRESHOLD_CONFIG.get(SIGNAL_TYPE, THRESHOLD_CONFIG["clip_float"])
+    
+    if config["type"] == "int":
+        thresholds = list(range(0, config["max"] + 1, config["step"]))
+    else:  # float
+        import numpy as np
+        start = config.get("start", 0.0)
+        thresholds = np.arange(start, config["max"] + config["step"]/2, config["step"]).tolist()
     print(f"[INFO] Found {len(image_files)} images. Starting threshold match test with thresholds={list(thresholds)}...")
     _log_info(f"Found {len(image_files)} images. Starting threshold match test with thresholds={list(thresholds)}...")
 

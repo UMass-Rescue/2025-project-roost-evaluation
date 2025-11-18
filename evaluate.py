@@ -259,7 +259,7 @@ class Evaluator:
             _log_debug(f"Request exception: {str(e)}")
             return {'status': 'failure', 'error': str(e)}
 
-    def match_local_content_threshold(self, file_path: str, threshold: int) -> dict:
+    def match_local_content_threshold(self, file_path: str, threshold: float) -> dict:
         hasher_resp = self.hash_local_content(file_path)
         signal_type = 'clip_float'
         

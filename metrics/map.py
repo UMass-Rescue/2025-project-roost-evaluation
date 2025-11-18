@@ -230,6 +230,27 @@ def average_precision_at_k(preds: List[str], positives: Set[str], k: int) -> flo
     return sum_precisions / denom
 
 
+def mean_average_precision_at_k(
+    preds_by_image: Dict[str, List[str]],
+    images: Set[str],
+    k: int,
+) -> float:
+    """
+    Compute mAP@k over a set of query images, given per-image ranked predictions.
+    """
+    if not images:
+        raise ValueError("Cannot compute mAP@k for an empty set of images.")
+
+    ap_values: List[float] = []
+    for query in images:
+        positives = set(images)
+        positives.discard(query)
+        preds = preds_by_image[query]
+        ap = average_precision_at_k(preds, positives, k)
+        ap_values.append(ap)
+    return sum(ap_values) / len(ap_values)
+
+
 def compute_series_map(
     series_to_images: Dict[str, Set[str]],
     rankings: Dict[str, List[Tuple[str, float]]],
@@ -254,14 +275,7 @@ def compute_series_map(
 
         ap_by_k: List[float] = []
         for k in range(1, max_k + 1):
-            ap_values: List[float] = []
-            for query in images:
-                positives = set(images)
-                positives.discard(query)
-                preds = preds_by_image[query]
-                ap = average_precision_at_k(preds, positives, k)
-                ap_values.append(ap)
-            series_map_k = sum(ap_values) / len(ap_values)
+            series_map_k = mean_average_precision_at_k(preds_by_image, images, k)
             ap_by_k.append(series_map_k)
         series_to_map[series] = ap_by_k
     return series_to_map

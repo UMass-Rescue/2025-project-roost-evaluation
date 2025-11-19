@@ -35,11 +35,13 @@ This builds HMA from ThreatExchange at commit `aff3f3b8` and starts:
 ```bash
 docker compose run --rm -e BANK_NAME=SMOKE_TEST evaluation
 ```
+The smoke test cleans the database, creates a bank, uploads all images from `resources/images/`, and tests matching.
 
 **All tests (uses clip_float by default):**
 ```bash
 docker compose run --rm -e EVAL_MODE=test evaluation
 ```
+Tests clean the database, create a bank, upload all images from `resources/images/`, and then run all test suites (pairwise, topk, threshold).
 
 **Test with clip (integer thresholds):**
 ```bash
@@ -65,7 +67,8 @@ All test runs create detailed logs in `test_run_logs/` folder:
 
 ## Features
 
-- **Automatic database cleanup**: Tests start with a clean database and empty index
+- **Automatic database cleanup**: Both smoke test and full test suite clean the database and populate it with test images
+- **Test isolation**: Each test run starts with a fresh database and empty index
 - **CLIP extension support**: HMA configured with CLIP signal type for semantic image matching
 - **Custom endpoints**: Includes `lookup_topk` and `lookup_threshold` endpoints via patch
 - **File logging**: All test output logged to files with minimal terminal noise

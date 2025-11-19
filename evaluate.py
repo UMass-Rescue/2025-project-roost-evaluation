@@ -516,6 +516,22 @@ def run_all_tests():
     evaluator = Evaluator()
     evaluator.cleanup_test_environment(signal_type=signal_type)
     
+    # Setup bank and upload images for tests that need index (topk, threshold)
+    BANK_NAME = os.getenv("BANK_NAME", "TEST_BANK_DATA")
+    _log_info("Setting up bank and uploading images for test run...")
+    if not evaluator.setup_bank(BANK_NAME):
+        _log_error("Failed to setup bank. Exiting.")
+        return
+    
+    files_to_send = [str(file) for file in image_input_dir.iterdir() if file.is_file()]
+    index_size_before = evaluator.get_index_size(signal_type)
+    _log_info(f"Starting index size: {index_size_before}")
+    print(f"Uploading {len(files_to_send)} images to bank...")
+    evaluator.upload_files_to_bank(files_to_send, BANK_NAME)
+    expected_size = index_size_before + len(files_to_send)
+    evaluator.wait_for_index_update(expected_size, signal_type)
+    _log_info(f"Index updated. Current size: {evaluator.get_index_size(signal_type)}")
+    
     test_dir = os.path.join(os.path.dirname(__file__), "tests")
     test_files = [f for f in os.listdir(test_dir) if f.endswith("_test.py")]
     _log_info(f"Found {len(test_files)} test files: {test_files}")

@@ -6,26 +6,7 @@ from tests.test_utils import get_image_files, write_results
 from evaluate import Evaluator, get_logger, _log_info, _log_debug, _log_warning
 
 OUTPUT_FILE = os.getenv("OUTPUT_FILE", "threshold_test_results.json")
-SIGNAL_TYPE = "clip_float"
-
-# Different threshold configurations for different signal types
-# PDQ and CLIP use integers, CLIP_FLOAT uses floats (0.0-1.0)
-INT_CONFIG = {
-    "max": int(os.getenv("THRESHOLD_MAX_INT", "100")),
-    "step": int(os.getenv("THRESHOLD_STEP_INT", "20")),
-    "type": "int"
-}
-
-THRESHOLD_CONFIG = {
-    "pdq": INT_CONFIG,
-    "clip": INT_CONFIG,
-    "clip_float": {
-        "max": float(os.getenv("THRESHOLD_MAX_FLOAT", "1.0")),
-        "step": float(os.getenv("THRESHOLD_STEP_FLOAT", "0.2")),
-        "start": float(os.getenv("THRESHOLD_START_FLOAT", "0.1")),  # Don't start at 0.0
-        "type": "float"
-    }
-}
+SIGNAL_TYPE = os.getenv("SIGNAL_TYPE", "clip_float")  # 'clip' or 'clip_float'
 
 def main():
     # Use existing logger if available, otherwise create a simple one
@@ -33,15 +14,18 @@ def main():
     evaluator = Evaluator()
     image_files = get_image_files()
     
-    # Get threshold configuration for this signal type
-    config = THRESHOLD_CONFIG.get(SIGNAL_TYPE, THRESHOLD_CONFIG["clip_float"])
-    
-    if config["type"] == "int":
-        thresholds = list(range(0, config["max"] + 1, config["step"]))
-    else:  # float
+    # Determine threshold configuration based on signal type
+    # clip uses int (0-100), clip_float uses float (0.0-1.0)
+    if SIGNAL_TYPE == "clip":
+        max_threshold = int(os.getenv("THRESHOLD_MAX", "100"))
+        step = int(os.getenv("THRESHOLD_STEP", "20"))
+        thresholds = list(range(0, max_threshold + 1, step))
+    else:  # clip_float
         import numpy as np
-        start = config.get("start", 0.0)
-        thresholds = np.arange(start, config["max"] + config["step"]/2, config["step"]).tolist()
+        max_threshold = float(os.getenv("THRESHOLD_MAX", "1.0"))
+        step = float(os.getenv("THRESHOLD_STEP", "0.2"))
+        num_steps = int(max_threshold / step) + 1
+        thresholds = np.linspace(0.0, max_threshold, num_steps).tolist()
     print(f"[INFO] Found {len(image_files)} images. Starting threshold match test with thresholds={list(thresholds)}...")
     _log_info(f"Found {len(image_files)} images. Starting threshold match test with thresholds={list(thresholds)}...")
 
@@ -53,9 +37,9 @@ def main():
     
     # tqdm for terminal progress, _log_info for log file
     for threshold, img in tqdm(test_items, desc="Threshold test progress", file=sys.stderr, ncols=80, disable=False):
-        _log_info(f"Matching {img} with threshold={threshold}")
+        _log_info(f"Matching {img} with threshold={threshold} using signal_type={SIGNAL_TYPE}")
         
-        match_resp = evaluator.match_local_content_threshold(img, threshold)
+        match_resp = evaluator.match_local_content_threshold(img, threshold, SIGNAL_TYPE)
 
         if match_resp.get("status") == "success":
             matches_count = len(match_resp.get("matches", []))

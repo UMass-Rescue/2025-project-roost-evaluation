@@ -6,7 +6,7 @@ from tests.test_utils import get_image_files, write_results
 from evaluate import Evaluator, get_logger, _log_info, _log_debug, _log_warning
 
 OUTPUT_FILE = os.getenv("OUTPUT_FILE", "topk_test_results.json")
-SIGNAL_TYPE = "clip_float"
+SIGNAL_TYPE = os.getenv("SIGNAL_TYPE", "clip_float")  # 'clip' or 'clip_float'
 MAX_K = int(os.getenv("MAX_K", 5))
 
 def main():
@@ -26,9 +26,9 @@ def main():
     
     # tqdm for terminal progress, _log_info for log file
     for k, img in tqdm(test_items, desc="Top-k test progress", file=sys.stderr, ncols=80, disable=False):
-        _log_info(f"Matching {img} with k={k}")
+        _log_info(f"Matching {img} with k={k} using signal_type={SIGNAL_TYPE}")
         
-        match_resp = evaluator.match_local_content_topk(img, k)
+        match_resp = evaluator.match_local_content_topk(img, k, SIGNAL_TYPE)
 
         if match_resp.get("status") == "success":
             matches_count = len(match_resp.get("matches", []))

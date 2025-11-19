@@ -176,9 +176,9 @@ class Evaluator:
                     'error': str(e)
                 }
 
-    def match_local_content(self, file_path: str) -> dict:
+    def match_local_content(self, file_path: str, signal_type: str) -> dict:
         hasher_resp = self.hash_local_content(file_path)
-        signal_type = 'clip_float'
+        # signal_type can be 'clip' or 'clip_float'
         
         # Check if hash was successful and contains the signal type
         if not isinstance(hasher_resp, dict) or signal_type not in hasher_resp:
@@ -218,9 +218,9 @@ class Evaluator:
             _log_debug(f"Request exception: {str(e)}")
             return {'status': 'failure', 'error': str(e)}
 
-    def match_local_content_topk(self, file_path: str, k: int) -> dict:
+    def match_local_content_topk(self, file_path: str, k: int, signal_type: str) -> dict:
         hasher_resp = self.hash_local_content(file_path)
-        signal_type = 'clip_float'
+        # signal_type can be 'clip' or 'clip_float'
         
         # Check if hash was successful and contains the signal type
         if not isinstance(hasher_resp, dict) or signal_type not in hasher_resp:
@@ -259,9 +259,9 @@ class Evaluator:
             _log_debug(f"Request exception: {str(e)}")
             return {'status': 'failure', 'error': str(e)}
 
-    def match_local_content_threshold(self, file_path: str, threshold: float) -> dict:
+    def match_local_content_threshold(self, file_path: str, threshold: int | float, signal_type: str) -> dict:
         hasher_resp = self.hash_local_content(file_path)
-        signal_type = 'clip_float'
+        # signal_type can be 'clip' (int thresholds) or 'clip_float' (float thresholds)
         
         # Check if hash was successful and contains the signal type
         if not isinstance(hasher_resp, dict) or signal_type not in hasher_resp:
@@ -346,16 +346,16 @@ class Evaluator:
         _log_warning("Timed out waiting for index update.")
 
 
-    def match_uploaded_files(self, files_to_send):
+    def match_uploaded_files(self, files_to_send, signal_type: str):
         """Match each uploaded file and print the response."""
         _log_info("Sleeping 35 seconds to allow in-memory index cache to refresh...")
         time.sleep(35)
         for match_file_path in files_to_send:
             _log_debug(match_file_path)
-            match_resp = self.match_local_content(match_file_path)
+            match_resp = self.match_local_content(match_file_path, signal_type)
             _log_debug(json.dumps(match_resp, indent=2))
 
-    def compare_hashes(self, hash1, hash2, signal_type="clip_float") -> dict:
+    def compare_hashes(self, hash1, hash2, signal_type: str) -> dict:
         url = f"{hma_app_url}/m/compare"
         headers = {"Content-Type": "application/json"}
         data = {
@@ -476,10 +476,11 @@ class Evaluator:
             _log_error(traceback.format_exc())
             return False
 
-    def cleanup_test_environment(self, signal_type="clip"):
+    def cleanup_test_environment(self, signal_type: str):
         """
         Clean up test environment by clearing all database data.
         This ensures complete isolation - no leftover indexes or data from previous runs.
+        signal_type can be 'clip' or 'clip_float'
         """
         _log_info("Cleaning up test environment...")
         
@@ -509,8 +510,11 @@ def run_all_tests():
     os.environ["TEST_RUN_TIMESTAMP"] = timestamp
     _log_info(f"Test run timestamp: {timestamp}")
     
+    signal_type = os.getenv("SIGNAL_TYPE", "clip_float")
+    _log_info(f"Using signal type: {signal_type}")
+    
     evaluator = Evaluator()
-    evaluator.cleanup_test_environment(signal_type="clip")
+    evaluator.cleanup_test_environment(signal_type=signal_type)
     
     test_dir = os.path.join(os.path.dirname(__file__), "tests")
     test_files = [f for f in os.listdir(test_dir) if f.endswith("_test.py")]
@@ -556,24 +560,28 @@ def main():
     test_run_type = "smoke" if eval_mode == "smoke" else "test"
     setup_logging(test_run_type)
     
+    # Get signal type from environment, default to clip_float
+    signal_type = os.getenv("SIGNAL_TYPE", "clip_float")
+    
     if eval_mode == "smoke":
         _log_info("[STARTUP] Creating fresh database for smoke test...")
-        print("Running smoke test...")
+        _log_info(f"Using signal type: {signal_type}")
+        print(f"Running smoke test with signal type: {signal_type}...")
         evaluator = Evaluator()
-        evaluator.cleanup_test_environment(signal_type="clip")
+        evaluator.cleanup_test_environment(signal_type=signal_type)
         
         BANK_NAME = os.getenv("BANK_NAME", "TEST_BANK_DATA")
         if not evaluator.setup_bank(BANK_NAME):
             return
 
         files_to_send = [str(file) for file in image_input_dir.iterdir() if file.is_file()]
-        index_size_before = evaluator.get_index_size("clip_float")
+        index_size_before = evaluator.get_index_size(signal_type)
         _log_info(f"Starting index size: {index_size_before}")
         print(f"Uploading {len(files_to_send)} files...")
         evaluator.upload_files_to_bank(files_to_send, BANK_NAME)
         expected_size = index_size_before + len(files_to_send)
-        evaluator.wait_for_index_update(expected_size, "clip_float")
-        evaluator.match_uploaded_files(files_to_send)
+        evaluator.wait_for_index_update(expected_size, signal_type)
+        evaluator.match_uploaded_files(files_to_send, signal_type)
         print(f"✓ Smoke test completed. Logs: {log_file}")
     else:
         run_all_tests()

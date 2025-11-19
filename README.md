@@ -31,14 +31,19 @@ This builds HMA from ThreatExchange at commit `aff3f3b8` and starts:
 
 ### 3. Run Tests
 
-**Smoke test (default):**
+**Smoke test (uses clip_float by default):**
 ```bash
 docker compose run --rm -e BANK_NAME=SMOKE_TEST evaluation
 ```
 
-**All tests:**
+**All tests (uses clip_float by default):**
 ```bash
 docker compose run --rm -e EVAL_MODE=test evaluation
+```
+
+**Test with clip (integer thresholds):**
+```bash
+docker compose run --rm -e EVAL_MODE=test -e SIGNAL_TYPE=clip evaluation
 ```
 
 **With custom parameters:**
@@ -78,9 +83,12 @@ All test runs create detailed logs in `test_run_logs/` folder:
 ### Test Configuration
 - `EVAL_MODE`: `smoke` (default) or `test`
 - `BANK_NAME`: Bank name for testing (default: `TEST_BANK_DATA`)
+- `SIGNAL_TYPE`: Signal type for matching (default: `clip_float` if not specified)
+  - `clip_float`: Float-based distance/thresholds (0.0-1.0 range)
+  - `clip`: Integer-based distance/thresholds (0-100 range)
 - `MAX_K`: Maximum k for top-k test (default: `5`)
-- `THRESHOLD_MAX`: Maximum threshold value (default: `100`)
-- `THRESHOLD_STEP`: Threshold step size (default: `20`)
+- `THRESHOLD_MAX`: Maximum threshold value (default: `100` for clip, `1.0` for clip_float)
+- `THRESHOLD_STEP`: Threshold step size (default: `20` for clip, `0.2` for clip_float)
 
 ### HMA Connection (auto-configured in docker-compose)
 - `HMA_HOST`: `hma-app` (internal container name)

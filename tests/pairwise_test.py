@@ -7,7 +7,7 @@ from tests.test_utils import get_image_files, hash_image, write_results, decode_
 from evaluate import Evaluator, get_logger, _log_info, _log_debug, _log_warning
 
 OUTPUT_FILE = os.getenv("OUTPUT_FILE", "pairwise_clip_compare.json")
-SIGNAL_TYPE = "clip_float"
+SIGNAL_TYPE = os.getenv("SIGNAL_TYPE", "clip_float")  # 'clip' or 'clip_float'
 
 def main():
     # Use existing logger if available, otherwise create a simple one

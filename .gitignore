@@ -1,2 +1,5 @@
 test_run_logs/
 evaluations_results/
+results/*
+__pycache__/*
+tests/__pycache__/*

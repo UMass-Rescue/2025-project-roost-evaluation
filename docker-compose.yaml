@@ -16,6 +16,8 @@ services:
     restart: unless-stopped
     volumes:
       - hma-postgres-data:/var/lib/postgresql/data
+    ports:
+      - "55432:5432"
     environment:
       <<: *postgres-variables
     healthcheck:

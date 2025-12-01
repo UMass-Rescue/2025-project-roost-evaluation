@@ -58,9 +58,30 @@ docker compose run --rm \
   evaluation
 ```
 
+### Local development (without docker run)
+- Ensure services are up (step 2). The compose file exposes:
+  - HMA on host port `5005`
+  - PostgreSQL on host port `55432`
+- Then you can run locally via the Makefile:
+```bash
+make smoke-test       # Uses localhost:5005 and localhost:55432
+make run-evaluation   # Runs all tests locally
+```
+
+### Compute mAP from pairwise results
+After running the pairwise test, compute mAP@k per series:
+```bash
+python metrics/map.py \
+  --labels resources/labels/images_series_labels.json \
+  --pairwise results/evaluation_results/<timestamp>/pairwise_clip_compare.json \
+  --output_csv results/evaluation_results/<timestamp>/map_by_series.csv
+```
+Notes:
+- Paths in pairwise JSON generated inside Docker may start with `/build/`; the script normalizes these automatically.
+
 ## Test Logs
 
-All test runs create detailed logs in `test_run_logs/` folder:
+All test runs create detailed logs in `OUTPUT_DIR/test_run_logs/` (default `./results/test_run_logs`):
 - Format: `{test_run_type}_{date}_{time}.log` (e.g., `smoke_20251107_115430.log`)
 - Terminal shows minimal progress output
 - Full logs with timestamps saved to files
@@ -97,9 +118,17 @@ All test runs create detailed logs in `test_run_logs/` folder:
 - `HMA_HOST`: `hma-app` (internal container name)
 - `HMA_PORT`: `5100` (internal container port)
 
+### Output and Anonymization
+- `OUTPUT_DIR`: Root directory for all outputs (default: `./results`).
+  - Results: `OUTPUT_DIR/evaluation_results/<timestamp>/...`
+  - Logs: `OUTPUT_DIR/test_run_logs/`
+  - Mapping: `OUTPUT_DIR/file_to_id_map/anon_id_map.json` (default if not overridden)
+- `DEANONYMIZE_IMAGE_PATHS`: Set to `1` to disable anonymization (filename anonymization is ON by default).
+- `ANON_ID_MAP_FILEPATH`: Optional override for the mapping file path. If set, uses this as a persistent path→ID store (loads existing mappings and updates after runs). The file contains `{ "<full_path>": "<id>" }`. **DON'T SHARE THIS FILE** if you don't want to leak original image paths.
+
 ## Results
 
-Test results are saved as JSON files in the project root:
+Test results are saved under `OUTPUT_DIR/evaluation_results/<timestamp>/` (default `./results/evaluation_results/<timestamp>/`):
 - `pairwise_clip_compare.json`
 - `topk_test_results.json`
 - `threshold_test_results.json`
@@ -120,3 +149,7 @@ curl http://localhost:5005/c/banks
 # Verify database
 docker compose exec hma-postgresql psql -U postgres -d media_match -c "\dt"
 ```
+
+## Description of the tests
+
+Refer to [EVALUATION_DESCRIPTION.md](EVALUATION_DESCRIPTION.md) for an overview of the tests.

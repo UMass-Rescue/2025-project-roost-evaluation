@@ -59,11 +59,15 @@ def load_labels(labels_path: str) -> Dict[str, Set[str]]:
 
 
 def load_pairwise(pairwise_path: str) -> List[dict]:
+    """
+    Load pairwise results, skipping entries with missing/invalid distance.
+    """
     with open(pairwise_path, "r") as f:
         data = json.load(f)
     if not isinstance(data, list):
         raise ValueError("Pairwise results must be a JSON list.")
     normalized_entries: List[dict] = []
+    skipped_count = 0
     for idx, item in enumerate(data):
         if not isinstance(item, dict):
             raise ValueError(f"Pairwise entry at index {idx} must be a JSON object.")
@@ -77,10 +81,19 @@ def load_pairwise(pairwise_path: str) -> List[dict]:
             raise ValueError(
                 f"Pairwise entry at index {idx} must have 'image1' and 'image2' as strings."
             )
-        if "distance" not in item:
-            raise ValueError(f"Pairwise entry at index {idx} missing 'distance'.")
-        d = extract_distance(item.get("distance"))
+        # Skip entries with missing/invalid distance rather than fail
+        try:
+            d = extract_distance(item.get("distance"))
+        except (ValueError, KeyError, TypeError):
+            skipped_count += 1
+            continue
         normalized_entries.append({"image1": a, "image2": b, "distance": d})
+    
+    if skipped_count > 0:
+        print(
+            f"Warning: Skipped {skipped_count} pairwise entries due to missing/invalid distances. "
+            "This may result in some images having fewer or no neighbors."
+        )
     return normalized_entries
 
 
@@ -164,13 +177,18 @@ def validate_inputs(
 
 def extract_distance(value) -> float:
     """
-    Handle distance provided as a number or as an object like { \"distance\": num }.
+    Handle distance provided as a number, string, or as an object like { \"distance\": num }.
     """
     if isinstance(value, (int, float)):
         return float(value)
+    if isinstance(value, str):
+        return float(value)
     if isinstance(value, dict):
-        if isinstance(value["distance"], (int, float)):
-            return float(value["distance"])
+        dist_val = value.get("distance")
+        if isinstance(dist_val, (int, float)):
+            return float(dist_val)
+        if isinstance(dist_val, str):
+            return float(dist_val)
     raise ValueError(f"Unsupported distance format: {value!r}")
 
 
@@ -287,7 +305,7 @@ def compute_series_map(
         # Pre-compute predictions per image (neighbor order only)
         preds_by_image: Dict[str, List[str]] = {}
         for img in images:
-            ranked = rankings[img]
+            ranked = rankings.get(img, [])
             preds_by_image[img] = [nbr for (nbr, _) in ranked if nbr != img]
 
         ap_by_k: List[float] = []

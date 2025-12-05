@@ -6,7 +6,9 @@ WORKDIR /build
 
 COPY evaluate.py /build/
 COPY tests/ /build/tests/
+COPY metrics/ /build/metrics/
 COPY resources/images /build/resources/images
+COPY resources/labels /build/resources/labels
 
 RUN pip install requests numpy scipy psycopg2-binary tqdm 
 

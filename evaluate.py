@@ -7,7 +7,6 @@ from pathlib import Path
 import logging
 from datetime import datetime
 from metrics.map import compute_map_from_pairwise
-from tests.test_utils import get_results_dir
 
 # Try to import psycopg2 for database access (optional)
 try:
@@ -506,11 +505,17 @@ class Evaluator:
             _log_error("Failed to clear database")
             return False
 
-def calculate_map_metrics():
+def calculate_map_metrics(results_dir):
     """Calculate MAP metrics for all signal types after tests complete."""
-    results_dir = get_results_dir()
     labels_path = Path("resources/labels/images_series_labels.json")
-    anon_map_path = results_dir / "anon_id_map.json"
+    
+    # Get anon_id_map path using same logic as PathIdStore.from_env()
+    anon_map_override = os.getenv("ANON_ID_MAP_FILEPATH")
+    if anon_map_override and anon_map_override.strip():
+        anon_map_path = Path(anon_map_override.strip())
+    else:
+        output_root = Path(os.getenv("OUTPUT_DIR", "./results"))
+        anon_map_path = output_root / "file_to_id_map" / "anon_id_map.json"
     
     for signal_type in SIGNAL_TYPES:
         pairwise_file = results_dir / f"pairwise_{signal_type}_compare.json"
@@ -614,7 +619,9 @@ def run_all_tests():
     # Calculate MAP metrics
     print("\nCalculating MAP metrics...")
     _log_info("Calculating MAP metrics...")
-    calculate_map_metrics()
+    output_root = Path(os.getenv("OUTPUT_DIR", "./results"))
+    results_dir = output_root / "evaluation_results" / timestamp
+    calculate_map_metrics(results_dir)
 
 def main():
     eval_mode = os.environ.get("EVAL_MODE", "smoke")

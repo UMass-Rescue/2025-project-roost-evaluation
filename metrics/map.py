@@ -352,6 +352,21 @@ def write_series_map_csv(
             writer.writerow(avg_row)
 
 
+def compute_map_from_pairwise(labels_path: str, pairwise_path: str, output_csv: str, anon_map_path: Optional[str] = None) -> None:
+    """Compute mAP@k from pairwise results and write to CSV."""
+    series_to_images = load_labels(labels_path)
+    entries = load_pairwise(pairwise_path)
+    id_to_path = load_anon_id_map(anon_map_path)
+    
+    validate_inputs(series_to_images, entries, id_to_path)
+    
+    rankings = build_rankings(entries, id_to_path)
+    max_k = max(len(v) for v in series_to_images.values())
+    series_to_map = compute_series_map(series_to_images, rankings, max_k)
+    
+    write_series_map_csv(series_to_map, output_csv)
+
+
 # ----------------------------
 # Main
 # ----------------------------
@@ -378,20 +393,8 @@ def main():
         help="Optional path to anon ID map JSON ({path: id}); used to map IDs back to paths.",
     )
     args = parser.parse_args()
-
-    series_to_images = load_labels(args.labels)
-    entries = load_pairwise(args.pairwise)
-    id_to_path = load_anon_id_map(args.anon_map)
-
-    # Validate inputs (single call as requested)
-    validate_inputs(series_to_images, entries, id_to_path)
-
-    # Build rankings and compute mAP
-    rankings = build_rankings(entries, id_to_path)
-    max_k = max(len(v) for v in series_to_images.values())
-    series_to_map = compute_series_map(series_to_images, rankings, max_k)
-
-    write_series_map_csv(series_to_map, args.output_csv)
+    
+    compute_map_from_pairwise(args.labels, args.pairwise, args.output_csv, args.anon_map)
 
 
 if __name__ == "__main__":

@@ -6,6 +6,8 @@ import time
 from pathlib import Path
 import logging
 from datetime import datetime
+from metrics.map import compute_map_from_pairwise
+from tests.test_utils import get_results_dir
 
 # Try to import psycopg2 for database access (optional)
 try:
@@ -504,6 +506,36 @@ class Evaluator:
             _log_error("Failed to clear database")
             return False
 
+def calculate_map_metrics():
+    """Calculate MAP metrics for all signal types after tests complete."""
+    results_dir = get_results_dir()
+    labels_path = Path("resources/labels/images_series_labels.json")
+    anon_map_path = results_dir / "anon_id_map.json"
+    
+    for signal_type in SIGNAL_TYPES:
+        pairwise_file = results_dir / f"pairwise_{signal_type}_compare.json"
+        output_csv = results_dir / f"map_by_series_{signal_type}_results.csv"
+        
+        if not pairwise_file.exists():
+            _log_warning(f"Pairwise results not found: {pairwise_file}")
+            continue
+        
+        try:
+            _log_info(f"Computing MAP metric for {signal_type}...")
+            print(f"  MAP@k for {signal_type}...", end=" ", flush=True)
+            compute_map_from_pairwise(
+                str(labels_path),
+                str(pairwise_file),
+                str(output_csv),
+                str(anon_map_path) if anon_map_path.exists() else None
+            )
+            print(f"✓")
+            _log_info(f"Saved to: {output_csv}")
+            print(f"    → {output_csv.name}")
+        except Exception as e:
+            print(f"✗ {e}")
+            _log_error(f"Failed to compute MAP for {signal_type}: {e}")
+
 def run_all_tests():
     setup_logging("test")
     global log_file  # Ensure we can access the log_file variable
@@ -578,6 +610,11 @@ def run_all_tests():
                 raise
     
     print(f"✓ All tests completed. Logs: {log_file}")
+    
+    # Calculate MAP metrics
+    print("\nCalculating MAP metrics...")
+    _log_info("Calculating MAP metrics...")
+    calculate_map_metrics()
 
 def main():
     eval_mode = os.environ.get("EVAL_MODE", "smoke")

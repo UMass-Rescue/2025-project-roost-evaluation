@@ -6,10 +6,11 @@ from tqdm import tqdm
 from tests.test_utils import get_image_files, hash_image, write_results, decode_clip_hex_to_floats
 from evaluate import Evaluator, get_logger, _log_info, _log_debug, _log_warning
 
-OUTPUT_FILE = os.getenv("OUTPUT_FILE", "pairwise_clip_compare.json")
-SIGNAL_TYPE = os.getenv("SIGNAL_TYPE", "clip_float")  # 'clip' or 'clip_float'
-
 def main():
+    # Read signal_type from env (fresh each call)
+    SIGNAL_TYPE = os.getenv("SIGNAL_TYPE", "clip_float")
+    OUTPUT_FILE = os.getenv("OUTPUT_FILE", f"pairwise_{SIGNAL_TYPE}_compare.json")
+    
     # Use existing logger if available, otherwise create a simple one
     logger = get_logger()
     evaluator = Evaluator()

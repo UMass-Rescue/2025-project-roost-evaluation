@@ -5,11 +5,12 @@ from tqdm import tqdm
 from tests.test_utils import get_image_files, write_results
 from evaluate import Evaluator, get_logger, _log_info, _log_debug, _log_warning
 
-OUTPUT_FILE = os.getenv("OUTPUT_FILE", "topk_test_results.json")
-SIGNAL_TYPE = os.getenv("SIGNAL_TYPE", "clip_float")  # 'clip' or 'clip_float'
-MAX_K = int(os.getenv("MAX_K", 5))
-
 def main():
+    # Read signal_type from env (fresh each call)
+    SIGNAL_TYPE = os.getenv("SIGNAL_TYPE", "clip_float")
+    OUTPUT_FILE = os.getenv("OUTPUT_FILE", f"topk_test_{SIGNAL_TYPE}_results.json")
+    MAX_K = int(os.getenv("MAX_K", 5))
+    
     # Use existing logger if available, otherwise create a simple one
     logger = get_logger()
     evaluator = Evaluator()

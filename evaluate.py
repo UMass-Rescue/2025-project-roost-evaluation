@@ -23,6 +23,9 @@ match_url = hma_app_url + "/m/lookup"
 match_url_topk = hma_app_url + "/m/lookup_topk"
 match_url_threshold = hma_app_url + "/m/lookup_threshold"
 
+# Signal types to test
+SIGNAL_TYPES = ["clip", "clip_float"]
+
 # Setup logging
 logger = None
 log_file = None
@@ -477,11 +480,11 @@ class Evaluator:
             _log_error(traceback.format_exc())
             return False
 
-    def cleanup_test_environment(self, signal_type: str):
+    def cleanup_test_environment(self):
         """
         Clean up test environment by clearing all database data.
         This ensures complete isolation - no leftover indexes or data from previous runs.
-        signal_type can be 'clip' or 'clip_float'
+        Verifies all signal types are empty.
         """
         _log_info("Cleaning up test environment...")
         
@@ -489,12 +492,13 @@ class Evaluator:
             # Wait for HMA to process the changes
             time.sleep(2)
             
-            # Verify index is empty
-            index_size = self.get_index_size(signal_type)
-            if index_size == 0:
-                _log_info(f"✓ {signal_type} index is empty")
-            else:
-                _log_warning(f"Index size is {index_size}, expected 0")
+            # Verify all indexes are empty
+            for signal_type in SIGNAL_TYPES:
+                index_size = self.get_index_size(signal_type)
+                if index_size == 0:
+                    _log_info(f"✓ {signal_type} index is empty")
+                else:
+                    _log_warning(f"{signal_type} index size is {index_size}, expected 0")
             return True
         else:
             _log_error("Failed to clear database")
@@ -511,11 +515,8 @@ def run_all_tests():
     os.environ["TEST_RUN_TIMESTAMP"] = timestamp
     _log_info(f"Test run timestamp: {timestamp}")
     
-    signal_type = os.getenv("SIGNAL_TYPE", "clip_float")
-    _log_info(f"Using signal type: {signal_type}")
-    
     evaluator = Evaluator()
-    evaluator.cleanup_test_environment(signal_type=signal_type)
+    evaluator.cleanup_test_environment()
     
     # Setup bank and upload images for tests that need index (topk, threshold)
     BANK_NAME = os.getenv("BANK_NAME", "TEST_BANK_DATA")
@@ -525,29 +526,15 @@ def run_all_tests():
         return
     
     files_to_send = [str(file) for file in image_input_dir.iterdir() if file.is_file()]
-    index_size_before = evaluator.get_index_size(signal_type)
-    _log_info(f"Starting index size: {index_size_before}")
     print(f"Uploading {len(files_to_send)} images to bank...")
     evaluator.upload_files_to_bank(files_to_send, BANK_NAME)
-    expected_size = index_size_before + len(files_to_send)
-    evaluator.wait_for_index_update(expected_size, signal_type)
-    _log_info(f"Index updated. Current size: {evaluator.get_index_size(signal_type)}")
     
-    # Setup bank and upload images for tests that need index (topk, threshold)
-    BANK_NAME = os.getenv("BANK_NAME", "TEST_BANK_DATA")
-    _log_info("Setting up bank and uploading images for test run...")
-    if not evaluator.setup_bank(BANK_NAME):
-        _log_error("Failed to setup bank. Exiting.")
-        return
-    
-    files_to_send = [str(file) for file in image_input_dir.iterdir() if file.is_file()]
-    index_size_before = evaluator.get_index_size("clip")
-    _log_info(f"Starting index size: {index_size_before}")
-    print(f"Uploading {len(files_to_send)} images to bank...")
-    evaluator.upload_files_to_bank(files_to_send, BANK_NAME)
-    expected_size = index_size_before + len(files_to_send)
-    evaluator.wait_for_index_update(expected_size, "clip")
-    _log_info(f"Index updated. Current size: {evaluator.get_index_size('clip')}")
+    # Wait for both indexes to update
+    for signal_type in SIGNAL_TYPES:
+        index_size_before = evaluator.get_index_size(signal_type)
+        expected_size = index_size_before + len(files_to_send)
+        evaluator.wait_for_index_update(expected_size, signal_type)
+        _log_info(f"{signal_type} index updated. Current size: {evaluator.get_index_size(signal_type)}")
     
     test_dir = os.path.join(os.path.dirname(__file__), "tests")
     test_files = [f for f in os.listdir(test_dir) if f.endswith("_test.py")]
@@ -557,34 +544,38 @@ def run_all_tests():
     import sys
     sys.stdout.flush()
     
-    for i, fname in enumerate(test_files, 1):
-        print(f"[{i}/{len(test_files)}] {fname}")
-        _log_info(f"Running {fname} ...")
+    for signal_type in SIGNAL_TYPES:
+        _log_info(f"Running tests with signal_type={signal_type}")
+        os.environ["SIGNAL_TYPE"] = signal_type
         
-        # Import and run test directly (no subprocess - much simpler!)
-        test_name = fname.replace("_test.py", "").replace("_", " ").title()
-        print(f"  {test_name}: ", end="", flush=True)
-        
-        try:
-            # Import the test module directly
-            module_name = fname.replace(".py", "")
-            test_module = __import__(f"tests.{module_name}", fromlist=[module_name])
+        for i, fname in enumerate(test_files, 1):
+            print(f"[{i}/{len(test_files)}] {fname} ({signal_type})")
+            _log_info(f"Running {fname} ...")
             
-            # Run the test's main function directly
-            if hasattr(test_module, 'main'):
-                test_module.main()
-                print()  # Newline after test completes
-                _log_info(f"Test {fname} completed successfully")
-            else:
-                _log_error(f"Test {fname} has no main() function")
-                raise ValueError(f"Test {fname} has no main() function")
+            # Import and run test directly (no subprocess - much simpler!)
+            test_name = fname.replace("_test.py", "").replace("_", " ").title()
+            print(f"  {test_name}: ", end="", flush=True)
+            
+            try:
+                # Import the test module directly
+                module_name = fname.replace(".py", "")
+                test_module = __import__(f"tests.{module_name}", fromlist=[module_name])
                 
-        except Exception as e:
-            print()  # Newline on error
-            _log_error(f"Test {fname} failed: {e}")
-            import traceback
-            _log_error(traceback.format_exc())
-            raise
+                # Run the test's main function directly
+                if hasattr(test_module, 'main'):
+                    test_module.main()
+                    print()  # Newline after test completes
+                    _log_info(f"Test {fname} completed successfully")
+                else:
+                    _log_error(f"Test {fname} has no main() function")
+                    raise ValueError(f"Test {fname} has no main() function")
+                    
+            except Exception as e:
+                print()  # Newline on error
+                _log_error(f"Test {fname} failed: {e}")
+                import traceback
+                _log_error(traceback.format_exc())
+                raise
     
     print(f"✓ All tests completed. Logs: {log_file}")
 
@@ -593,28 +584,27 @@ def main():
     test_run_type = "smoke" if eval_mode == "smoke" else "test"
     setup_logging(test_run_type)
     
-    # Get signal type from environment, default to clip_float
-    signal_type = os.getenv("SIGNAL_TYPE", "clip_float")
-    
     if eval_mode == "smoke":
         _log_info("[STARTUP] Creating fresh database for smoke test...")
-        _log_info(f"Using signal type: {signal_type}")
-        print(f"Running smoke test with signal type: {signal_type}...")
+        print(f"Running smoke test...")
         evaluator = Evaluator()
-        evaluator.cleanup_test_environment(signal_type=signal_type)
+        evaluator.cleanup_test_environment()
         
         BANK_NAME = os.getenv("BANK_NAME", "TEST_BANK_DATA")
         if not evaluator.setup_bank(BANK_NAME):
             return
 
         files_to_send = [str(file) for file in image_input_dir.iterdir() if file.is_file()]
-        index_size_before = evaluator.get_index_size(signal_type)
-        _log_info(f"Starting index size: {index_size_before}")
         print(f"Uploading {len(files_to_send)} files...")
         evaluator.upload_files_to_bank(files_to_send, BANK_NAME)
-        expected_size = index_size_before + len(files_to_send)
-        evaluator.wait_for_index_update(expected_size, signal_type)
-        evaluator.match_uploaded_files(files_to_send, signal_type)
+        
+        for signal_type in SIGNAL_TYPES:
+            _log_info(f"Testing signal_type={signal_type}")
+            index_size_before = evaluator.get_index_size(signal_type)
+            expected_size = index_size_before + len(files_to_send)
+            evaluator.wait_for_index_update(expected_size, signal_type)
+            evaluator.match_uploaded_files(files_to_send, signal_type)
+        
         print(f"✓ Smoke test completed. Logs: {log_file}")
     else:
         run_all_tests()

@@ -253,47 +253,21 @@ def build_rankings(
 
 
 def validate_series_metadata_exists(labels_path: str = None) -> None:
-    """
-    Validate that series metadata file exists and contains valid series data.
-    Raises ValueError if no series metadata is provided or if it's invalid.
-    """
+    """Validate series metadata file exists and has valid data."""
     if labels_path is None:
         labels_path = "resources/labels/images_series_labels.json"
     
-    labels_file = Path(labels_path)
+    if not Path(labels_path).exists():
+        raise ValueError(f"Series metadata not found: {labels_path}")
     
-    if not labels_file.exists():
-        raise ValueError(
-            f"Series metadata file not found at {labels_path}. "
-            "Series labels are required to run evaluation metrics. "
-            "Please provide a JSON file with series -> list of image paths mapping."
-        )
-    
-    # Try to load and validate the structure
-    try:
-        series_to_images = load_labels(labels_path)
-    except Exception as e:
-        raise ValueError(
-            f"Failed to load series metadata from {labels_path}: {e}"
-        )
+    series_to_images = load_labels(labels_path)
     
     if not series_to_images:
-        raise ValueError(
-            f"Series metadata file {labels_path} is empty. "
-            "At least one series with images is required."
-        )
+        raise ValueError(f"Series metadata is empty: {labels_path}")
     
-    # Check that each series has at least 2 images (needed for MAP computation)
-    invalid_series = []
-    for series, images in series_to_images.items():
-        if len(images) < 2:
-            invalid_series.append(f"{series} (has {len(images)} image(s), needs at least 2)")
-    
-    if invalid_series:
-        raise ValueError(
-            f"Invalid series found in {labels_path}. Each series must have at least 2 images:\n  "
-            + "\n  ".join(invalid_series)
-        )
+    invalid = [f"{s} ({len(imgs)} images)" for s, imgs in series_to_images.items() if len(imgs) < 2]
+    if invalid:
+        raise ValueError(f"Series must have ≥2 images: {', '.join(invalid)}")
     
     print(f"✓ Series metadata validated: {len(series_to_images)} series found")
 

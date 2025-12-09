@@ -509,6 +509,13 @@ def calculate_map_metrics(results_dir):
     """Calculate MAP metrics for all signal types after tests complete."""
     labels_path = Path("resources/labels/images_series_labels.json")
     
+    from tests.test_utils import validate_series_metadata_exists
+    try:
+        validate_series_metadata_exists(str(labels_path))
+    except ValueError as e:
+        print(f"✗ Cannot calculate metrics: {e}")
+        return
+    
     # Get anon_id_map path using same logic as PathIdStore.from_env()
     anon_map_override = os.getenv("ANON_ID_MAP_FILEPATH")
     if anon_map_override and anon_map_override.strip():
@@ -546,6 +553,13 @@ def run_all_tests():
     global log_file  # Ensure we can access the log_file variable
     _log_info("[STARTUP] Creating fresh database for test run...")
     print("Running tests...")
+    
+    from tests.test_utils import validate_series_metadata_exists
+    try:
+        validate_series_metadata_exists()
+    except ValueError as e:
+        print(f"✗ {e}")
+        raise
     
     # Generate timestamp for this test run and pass to subprocesses
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")

@@ -247,6 +247,18 @@ def build_rankings(
     return rankings
 
 
+def build_image_to_series_map(series_to_images: Dict[str, Set[str]]) -> Dict[str, str]:
+    """
+    Build reverse mapping from image path to series name.
+    Returns dict: image_path -> series_name.
+    """
+    image_to_series: Dict[str, str] = {}
+    for series, images in series_to_images.items():
+        for img in images:
+            image_to_series[img] = series
+    return image_to_series
+
+
 # ----------------------------
 # Series metadata validation
 # ----------------------------

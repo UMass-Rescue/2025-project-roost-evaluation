@@ -68,16 +68,41 @@ make smoke-test       # Uses localhost:5005 and localhost:55432
 make run-evaluation   # Runs all tests locally
 ```
 
-### Compute mAP from pairwise results
-After running the pairwise test, compute mAP@k per series:
+### Performance Metrics & Visualizations
+
+After running tests, metrics and graphs are automatically generated. You can also compute them manually:
+
+**mAP (Mean Average Precision):**
 ```bash
 python metrics/map.py \
   --labels resources/labels/images_series_labels.json \
   --pairwise results/evaluation_results/<timestamp>/pairwise_clip_compare.json \
   --output_csv results/evaluation_results/<timestamp>/map_by_series.csv
 ```
+
+**Precision-Recall Curves:**
+```bash
+python metrics/precision_recall.py \
+  --labels resources/labels/images_series_labels.json \
+  --pairwise results/evaluation_results/<timestamp>/pairwise_clip_compare.json \
+  --output_csv precision_recall_results.csv \
+  --output_plot precision_recall_curve.png
+```
+
+**Distance Distribution Histograms:**
+```bash
+python metrics/distance_distribution.py \
+  --labels resources/labels/images_series_labels.json \
+  --pairwise results/evaluation_results/<timestamp>/pairwise_clip_compare.json \
+  --output_plot distance_distribution.png \
+  --signal_type clip
+```
+
+**Automatic generation:** All metrics and graphs are automatically created when running the full test suite.
+
 Notes:
-- Paths in pairwise JSON generated inside Docker may start with `/build/`; the script normalizes these automatically.
+- Paths in pairwise JSON generated inside Docker may start with `/build/`; the scripts normalize these automatically.
+- All metrics support `--anon_map` parameter if using anonymized paths.
 
 ## Test Logs
 

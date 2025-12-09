@@ -1,6 +1,5 @@
 import argparse
 import csv
-import json
 import sys
 from pathlib import Path
 from typing import Dict, List, Set, Tuple, Optional
@@ -8,17 +7,8 @@ from typing import Dict, List, Set, Tuple, Optional
 # Add parent directory to path to import from tests
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from tests.test_utils import (
-    normalize_label_path,
-    normalize_pairwise_path,
-    load_labels,
-    load_pairwise,
-    load_anon_id_map,
-    collect_pairwise_paths,
-    validate_inputs,
-    extract_distance,
-    build_rankings,
-)
+from metrics.common import load_and_validate_data, build_predictions_by_image, ensure_output_dir
+from tests.test_utils import build_rankings
 
 
 # ----------------------------
@@ -40,7 +30,6 @@ def average_precision_at_k(preds: List[str], positives: Set[str], k: int) -> flo
 
     hits = 0
     sum_precisions = 0.0
-    # Iterate over predictions until we see denom positives or exhaust preds
     for idx, p in enumerate(preds, start=1):
         if p in positives:
             hits += 1
@@ -48,7 +37,6 @@ def average_precision_at_k(preds: List[str], positives: Set[str], k: int) -> flo
             if hits == denom:
                 break
         if idx == k:
-            # We only care about top-k ranks; continue if k < denom (won't happen since denom<=k)
             break
     return sum_precisions / denom
 
@@ -58,16 +46,13 @@ def mean_average_precision_at_k(
     images: Set[str],
     k: int,
 ) -> float:
-    """
-    Compute mAP@k over a set of query images, given per-image ranked predictions.
-    """
+    """Compute mAP@k over a set of query images."""
     if not images:
         raise ValueError("Cannot compute mAP@k for an empty set of images.")
 
     ap_values: List[float] = []
     for query in images:
-        positives = set(images)
-        positives.discard(query)
+        positives = set(images) - {query}
         preds = preds_by_image[query]
         ap = average_precision_at_k(preds, positives, k)
         ap_values.append(ap)
@@ -79,28 +64,21 @@ def compute_series_map(
     rankings: Dict[str, List[Tuple[str, float]]],
     max_k: int,
 ) -> Dict[str, List[float]]:
-    """
-    For each series, compute mAP@k for k=1..max_k.
-    For series with size s, AP uses denom=min(k, s-1) per query.
-    """
+    """Compute mAP@k for k=1..max_k for each series."""
     series_to_map: Dict[str, List[float]] = {}
+    
     for series, images in series_to_images.items():
-        s = len(images)
-        if s == 0:
-            raise ValueError(f"Series '{series}' has no images.")
-        if s <= 1:
-            raise ValueError(f"Series '{series}' has only one image.")
-        # Pre-compute predictions per image (neighbor order only)
-        preds_by_image: Dict[str, List[str]] = {}
-        for img in images:
-            ranked = rankings.get(img, [])
-            preds_by_image[img] = [nbr for (nbr, _) in ranked if nbr != img]
-
+        if len(images) <= 1:
+            raise ValueError(f"Series '{series}' needs at least 2 images, has {len(images)}.")
+        
+        preds_by_image = build_predictions_by_image(images, rankings)
+        
         ap_by_k: List[float] = []
         for k in range(1, max_k + 1):
             series_map_k = mean_average_precision_at_k(preds_by_image, images, k)
             ap_by_k.append(series_map_k)
         series_to_map[series] = ap_by_k
+    
     return series_to_map
 
 
@@ -112,26 +90,28 @@ def compute_series_map(
 def write_series_map_csv(
     series_to_map: Dict[str, List[float]], output_csv: str
 ) -> None:
-    out_path = Path(output_csv)
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    # Determine header size (max k)
+    """Write mAP results to CSV with mean row."""
+    out_path = ensure_output_dir(output_csv)
     max_k = max((len(v) for v in series_to_map.values()), default=0)
     fieldnames = ["series"] + [f"map@{k}" for k in range(1, max_k + 1)]
+    
     with open(out_path, "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
-        # Write per-series rows and accumulate for averages
-        sums = [0.0 for _ in range(max_k)]
-        counts = [0 for _ in range(max_k)]
+        
+        # Write per-series rows and accumulate for mean
+        sums = [0.0] * max_k
+        counts = [0] * max_k
+        
         for series, values in series_to_map.items():
             row = {"series": series}
             for i, v in enumerate(values, start=1):
                 row[f"map@{i}"] = f"{v:.6f}"
-                if i - 1 < max_k:
-                    sums[i - 1] += v
-                    counts[i - 1] += 1
+                sums[i - 1] += v
+                counts[i - 1] += 1
             writer.writerow(row)
-        # Append average row
+        
+        # Write mean row
         if max_k > 0 and any(c > 0 for c in counts):
             avg_row = {"series": "mean"}
             for i in range(max_k):
@@ -140,13 +120,16 @@ def write_series_map_csv(
             writer.writerow(avg_row)
 
 
-def compute_map_from_pairwise(labels_path: str, pairwise_path: str, output_csv: str, anon_map_path: Optional[str] = None) -> None:
+def compute_map_from_pairwise(
+    labels_path: str, 
+    pairwise_path: str, 
+    output_csv: str, 
+    anon_map_path: Optional[str] = None
+) -> None:
     """Compute mAP@k from pairwise results and write to CSV."""
-    series_to_images = load_labels(labels_path)
-    entries = load_pairwise(pairwise_path)
-    id_to_path = load_anon_id_map(anon_map_path)
-    
-    validate_inputs(series_to_images, entries, id_to_path)
+    series_to_images, entries, id_to_path = load_and_validate_data(
+        labels_path, pairwise_path, anon_map_path
+    )
     
     rankings = build_rankings(entries, id_to_path)
     max_k = max(len(v) for v in series_to_images.values())
@@ -156,7 +139,7 @@ def compute_map_from_pairwise(labels_path: str, pairwise_path: str, output_csv: 
 
 
 # ----------------------------
-# Main
+# CLI
 # ----------------------------
 
 
@@ -165,20 +148,20 @@ def main():
         description="Compute mAP@k from pairwise image distances and series labels."
     )
     parser.add_argument(
-        "--labels",
-        required=True,
-        help="Path to labels JSON (series -> list of image paths).",
+        "--labels", required=True,
+        help="Path to labels JSON (series -> list of image paths)."
     )
     parser.add_argument(
-        "--pairwise",
-        required=True,
-        help="Path to pairwise results JSON from pairwise_test.py.",
+        "--pairwise", required=True,
+        help="Path to pairwise results JSON."
     )
-    parser.add_argument("--output_csv", required=True, help="Output CSV path.")
+    parser.add_argument(
+        "--output_csv", required=True,
+        help="Output CSV path."
+    )
     parser.add_argument(
         "--anon_map",
-        required=False,
-        help="Optional path to anon ID map JSON ({path: id}); used to map IDs back to paths.",
+        help="Optional path to anon ID map JSON."
     )
     args = parser.parse_args()
     

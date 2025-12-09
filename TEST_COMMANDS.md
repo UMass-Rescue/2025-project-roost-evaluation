@@ -101,26 +101,62 @@ cat evaluations_results/<timestamp>/pairwise_clip_compare.json | head -50
 cat evaluations_results/<timestamp>/pairwise_clip_float_compare.json | head -50
 ```
 
-## MAP Metrics
+## Performance Metrics & Graphs
 
-MAP (Mean Average Precision) metrics are automatically computed by `evaluate.py` after tests complete. View the results:
+After tests complete, `evaluate.py` automatically generates performance metrics and visualizations:
+
+### Outputs Generated
+
+For each signal type (clip, clip_float):
+
+**MAP (Mean Average Precision):**
+- CSV: `map_by_series_{signal_type}_results.csv`
+
+**Precision-Recall Curves:**
+- CSV: `precision_recall_{signal_type}_results.csv`
+- Plot: `precision_recall_{signal_type}_curve.png`
+
+**Distance Distributions:**
+- Plot: `distance_distribution_{signal_type}.png` (histograms comparing same-series vs different-series pairs)
+
+### View Results
 
 ```bash
-# View MAP results for CLIP
+# View CSV results
 cat evaluations_results/<timestamp>/map_by_series_clip_results.csv
+cat evaluations_results/<timestamp>/precision_recall_clip_results.csv
 
-# View MAP results for CLIP_float
-cat evaluations_results/<timestamp>/map_by_series_clip_float_results.csv
+# View graphs (open in browser/viewer)
+open evaluations_results/<timestamp>/precision_recall_clip_curve.png
+open evaluations_results/<timestamp>/distance_distribution_clip.png
 ```
 
-The CSV files contain mAP@k values for each image series (k=1 to max series size) with a mean row at the bottom.
+### Manual Metric Computation
 
-You can also manually compute MAP from pairwise results:
+**MAP:**
 ```bash
 python metrics/map.py \
   --labels resources/labels/images_series_labels.json \
   --pairwise evaluations_results/<timestamp>/pairwise_clip_compare.json \
   --output_csv custom_map_results.csv
+```
+
+**Precision-Recall with curve:**
+```bash
+python metrics/precision_recall.py \
+  --labels resources/labels/images_series_labels.json \
+  --pairwise evaluations_results/<timestamp>/pairwise_clip_compare.json \
+  --output_csv precision_recall_results.csv \
+  --output_plot precision_recall_curve.png
+```
+
+**Distance distribution:**
+```bash
+python metrics/distance_distribution.py \
+  --labels resources/labels/images_series_labels.json \
+  --pairwise evaluations_results/<timestamp>/pairwise_clip_compare.json \
+  --output_plot distance_distribution.png \
+  --signal_type clip
 ```
 
 ## Cleanup

@@ -6,7 +6,6 @@ import time
 from pathlib import Path
 import logging
 from datetime import datetime
-from metrics.map import compute_map_from_pairwise
 
 # Try to import psycopg2 for database access (optional)
 try:
@@ -506,7 +505,12 @@ class Evaluator:
             return False
 
 def calculate_map_metrics(results_dir):
-    """Calculate MAP metrics for all signal types after tests complete."""
+    """Calculate MAP and Precision-Recall metrics, generate plots for all signal types."""
+    # Import here to avoid circular dependency
+    from metrics.map import compute_map_from_pairwise
+    from metrics.precision_recall import compute_precision_recall_from_pairwise
+    from metrics.distance_distribution import compute_distance_distribution
+    
     labels_path = Path("resources/labels/images_series_labels.json")
     
     from tests.test_utils import validate_series_metadata_exists
@@ -526,27 +530,69 @@ def calculate_map_metrics(results_dir):
     
     for signal_type in SIGNAL_TYPES:
         pairwise_file = results_dir / f"pairwise_{signal_type}_compare.json"
-        output_csv = results_dir / f"map_by_series_{signal_type}_results.csv"
         
         if not pairwise_file.exists():
             _log_warning(f"Pairwise results not found: {pairwise_file}")
             continue
         
+        # Compute MAP
+        map_output_csv = results_dir / f"map_by_series_{signal_type}_results.csv"
         try:
             _log_info(f"Computing MAP metric for {signal_type}...")
             print(f"  MAP@k for {signal_type}...", end=" ", flush=True)
             compute_map_from_pairwise(
                 str(labels_path),
                 str(pairwise_file),
-                str(output_csv),
+                str(map_output_csv),
                 str(anon_map_path) if anon_map_path.exists() else None
             )
             print(f"✓")
-            _log_info(f"Saved to: {output_csv}")
-            print(f"    → {output_csv.name}")
+            _log_info(f"Saved to: {map_output_csv}")
+            print(f"    → {map_output_csv.name}")
         except Exception as e:
             print(f"✗ {e}")
             _log_error(f"Failed to compute MAP for {signal_type}: {e}")
+        
+        # Compute Precision-Recall with plot
+        pr_output_csv = results_dir / f"precision_recall_{signal_type}_results.csv"
+        pr_output_plot = results_dir / f"precision_recall_{signal_type}_curve.png"
+        try:
+            _log_info(f"Computing Precision-Recall@k for {signal_type}...")
+            print(f"  Precision-Recall@k for {signal_type}...", end=" ", flush=True)
+            compute_precision_recall_from_pairwise(
+                str(labels_path),
+                str(pairwise_file),
+                str(pr_output_csv),
+                str(pr_output_plot),
+                str(anon_map_path) if anon_map_path.exists() else None
+            )
+            print(f"✓")
+            _log_info(f"Saved CSV: {pr_output_csv}")
+            _log_info(f"Saved plot: {pr_output_plot}")
+            print(f"    → {pr_output_csv.name}")
+            print(f"    → {pr_output_plot.name}")
+        except Exception as e:
+            print(f"✗ {e}")
+            _log_error(f"Failed to compute Precision-Recall for {signal_type}: {e}")
+        
+        # Generate distance distribution histograms
+        dist_output_plot = results_dir / f"distance_distribution_{signal_type}.png"
+        try:
+            _log_info(f"Generating distance distribution plot for {signal_type}...")
+            print(f"  Distance distribution for {signal_type}...", end=" ", flush=True)
+            compute_distance_distribution(
+                str(labels_path),
+                str(pairwise_file),
+                str(dist_output_plot),
+                signal_type,
+                str(anon_map_path) if anon_map_path.exists() else None
+            )
+            print(f"✓")
+            _log_info(f"Saved plot: {dist_output_plot}")
+            print(f"    → {dist_output_plot.name}")
+        except Exception as e:
+            print(f"✗ {e}")
+            _log_error(f"Failed to generate distance distribution for {signal_type}: {e}")
 
 def run_all_tests():
     setup_logging("test")

@@ -24,7 +24,12 @@ match_url_topk = hma_app_url + "/m/lookup_topk"
 match_url_threshold = hma_app_url + "/m/lookup_threshold"
 
 # Signal types to test
-SIGNAL_TYPES = ["clip", "clip_float"]
+# Can be overridden via SIGNAL_TYPE env var (e.g., SIGNAL_TYPE=clip)
+_signal_type_env = os.getenv("SIGNAL_TYPE", "").strip()
+if _signal_type_env:
+    SIGNAL_TYPES = [_signal_type_env]
+else:
+    SIGNAL_TYPES = ["clip", "clip_float"]
 
 # Setup logging
 logger = None

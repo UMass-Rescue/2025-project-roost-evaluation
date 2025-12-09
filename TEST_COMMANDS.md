@@ -22,6 +22,8 @@ docker compose ps
 
 **Note**: By default, all tests run for both `clip` and `clip_float` signal types. Results are saved with signal type in filename (e.g., `pairwise_clip_compare.json`, `pairwise_clip_float_compare.json`).
 
+**To test only one signal type**, set the `SIGNAL_TYPE` environment variable (e.g., `-e SIGNAL_TYPE=clip`).
+
 ### Smoke Test
 ```bash
 # Tests both clip and clip_float
@@ -30,8 +32,14 @@ docker compose run --rm -e BANK_NAME=SMOKE_TEST evaluation
 
 ### All Tests
 ```bash
-# Runs all tests for both clip and clip_float signal types
+# Runs all tests for both clip and clip_float signal types (default)
 docker compose run --rm -e EVAL_MODE=test evaluation
+
+# Run all tests for ONLY clip signal type
+docker compose run --rm -e EVAL_MODE=test -e SIGNAL_TYPE=clip evaluation
+
+# Run all tests for ONLY clip_float signal type
+docker compose run --rm -e EVAL_MODE=test -e SIGNAL_TYPE=clip_float evaluation
 ```
 
 ### Individual Tests

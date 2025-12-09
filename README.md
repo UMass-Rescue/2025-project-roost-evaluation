@@ -132,7 +132,9 @@ All test runs create detailed logs in `OUTPUT_DIR/test_run_logs/` (default `./re
 ### Test Configuration
 - `EVAL_MODE`: `smoke` (default) or `test`
 - `BANK_NAME`: Bank name for testing (default: `TEST_BANK_DATA`)
-- `SIGNAL_TYPE`: Signal type for matching (default: `clip_float` if not specified)
+- `SIGNAL_TYPE`: Signal type for matching (optional)
+  - If **not set**: Tests both `clip` and `clip_float` (default behavior)
+  - If **set**: Tests only the specified signal type (e.g., `SIGNAL_TYPE=clip`)
   - `clip_float`: Float-based distance/thresholds (0.0-1.0 range)
   - `clip`: Integer-based distance/thresholds (0-100 range)
 - `MAX_K`: Maximum k for top-k test (default: `5`)

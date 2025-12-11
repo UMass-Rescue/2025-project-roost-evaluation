@@ -120,7 +120,7 @@ For each signal type (clip, clip_float):
 **MAP (Mean Average Precision):**
 - CSV: `map_by_series_{signal_type}_results.csv`
 
-**Precision-Recall Curves:**
+**Classification Precision-Recall (threshold sweep):**
 - CSV: `precision_recall_{signal_type}_results.csv`
 - Plot: `precision_recall_{signal_type}_curve.png`
 
@@ -149,7 +149,7 @@ python metrics/map.py \
   --output_csv custom_map_results.csv
 ```
 
-**Precision-Recall with curve:**
+**Classification Precision-Recall (threshold sweep):**
 ```bash
 python metrics/precision_recall.py \
   --labels resources/labels/images_series_labels.json \

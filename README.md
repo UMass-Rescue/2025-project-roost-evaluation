@@ -80,7 +80,7 @@ python metrics/map.py \
   --output_csv results/evaluation_results/<timestamp>/map_by_series.csv
 ```
 
-**Precision-Recall Curves:**
+**Classification Precision-Recall (threshold sweep):**
 ```bash
 python metrics/precision_recall.py \
   --labels resources/labels/images_series_labels.json \

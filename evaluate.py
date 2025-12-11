@@ -509,8 +509,8 @@ class Evaluator:
             _log_error("Failed to clear database")
             return False
 
-def calculate_map_metrics(results_dir):
-    """Calculate MAP and Precision-Recall metrics, generate plots for all signal types."""
+def calculate_metrics(results_dir):
+    """Calculate MAP, classification PR, and distance plots for all signal types."""
     # Import here to avoid circular dependency
     from metrics.map import compute_map_from_pairwise
     from metrics.precision_recall import compute_precision_recall_from_pairwise
@@ -558,27 +558,28 @@ def calculate_map_metrics(results_dir):
             print(f"✗ {e}")
             _log_error(f"Failed to compute MAP for {signal_type}: {e}")
         
-        # Compute Precision-Recall with plot
-        pr_output_csv = results_dir / f"precision_recall_{signal_type}_results.csv"
-        pr_output_plot = results_dir / f"precision_recall_{signal_type}_curve.png"
+        # Compute classification Precision-Recall (threshold sweep)
+        pr_csv = results_dir / f"precision_recall_{signal_type}_results.csv"
+        pr_plot = results_dir / f"precision_recall_{signal_type}_curve.png"
         try:
-            _log_info(f"Computing Precision-Recall@k for {signal_type}...")
-            print(f"  Precision-Recall@k for {signal_type}...", end=" ", flush=True)
+            _log_info(f"Computing classification Precision-Recall for {signal_type}...")
+            print(f"  Classification PR for {signal_type}...", end=" ", flush=True)
             compute_precision_recall_from_pairwise(
                 str(labels_path),
                 str(pairwise_file),
-                str(pr_output_csv),
-                str(pr_output_plot),
-                str(anon_map_path) if anon_map_path.exists() else None
+                str(pr_csv),
+                str(pr_plot),
+                str(anon_map_path) if anon_map_path.exists() else None,
+                signal_type,
             )
             print(f"✓")
-            _log_info(f"Saved CSV: {pr_output_csv}")
-            _log_info(f"Saved plot: {pr_output_plot}")
-            print(f"    → {pr_output_csv.name}")
-            print(f"    → {pr_output_plot.name}")
+            _log_info(f"Saved CSV: {pr_csv}")
+            _log_info(f"Saved plot: {pr_plot}")
+            print(f"    → {pr_csv.name}")
+            print(f"    → {pr_plot.name}")
         except Exception as e:
             print(f"✗ {e}")
-            _log_error(f"Failed to compute Precision-Recall for {signal_type}: {e}")
+            _log_error(f"Failed to compute classification PR for {signal_type}: {e}")
         
         # Generate distance distribution histograms
         dist_output_plot = results_dir / f"distance_distribution_{signal_type}.png"
@@ -686,7 +687,7 @@ def run_all_tests():
     _log_info("Calculating MAP metrics...")
     output_root = Path(os.getenv("OUTPUT_DIR", "./results"))
     results_dir = output_root / "evaluation_results" / timestamp
-    calculate_map_metrics(results_dir)
+    calculate_metrics(results_dir)
 
 def main():
     eval_mode = os.environ.get("EVAL_MODE", "smoke")

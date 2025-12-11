@@ -1,12 +1,13 @@
 import argparse
-import csv
 import sys
 from pathlib import Path
-from typing import Dict, List, Set, Tuple, Optional
+from typing import Dict, List, Optional, Tuple
+
+import numpy as np
 
 try:
     import matplotlib
-    matplotlib.use('Agg')
+    matplotlib.use("Agg")
     import matplotlib.pyplot as plt
     MATPLOTLIB_AVAILABLE = True
 except ImportError:
@@ -15,190 +16,173 @@ except ImportError:
 # Add parent directory to path to import from tests
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from metrics.common import load_and_validate_data, build_predictions_by_image, ensure_output_dir
-from tests.test_utils import build_rankings
+from metrics.common import load_and_validate_data, ensure_output_dir
+from tests.test_utils import normalize_pairwise_path, build_image_to_series_map
 
 
-# ----------------------------
-# Precision/Recall computation
-# ----------------------------
-
-
-def precision_at_k(preds: List[str], positives: Set[str], k: int) -> float:
-    """Compute Precision@k = (# relevant in top-k) / k"""
-    if k == 0:
-        return 0.0
-    relevant_count = sum(1 for p in preds[:k] if p in positives)
-    return relevant_count / k
-
-
-def recall_at_k(preds: List[str], positives: Set[str], k: int) -> float:
-    """Compute Recall@k = (# relevant in top-k) / (total # relevant)"""
-    if not positives:
-        return 0.0
-    relevant_count = sum(1 for p in preds[:k] if p in positives)
-    return relevant_count / len(positives)
-
-
-def compute_series_precision_recall(
-    series_to_images: Dict[str, Set[str]],
-    rankings: Dict[str, List[Tuple[str, float]]],
-    max_k: int,
-) -> Dict[str, Dict[str, List[Tuple[float, float]]]]:
+def _collect_labeled_distances(
+    series_to_images: Dict[str, set],
+    pairwise_entries: List[dict],
+    id_to_path: Optional[Dict[str, str]] = None,
+) -> List[Tuple[float, bool]]:
     """
-    Compute Precision@k and Recall@k for k=1..max_k for each query in each series.
-    Returns: {series: {query_image: [(prec, rec) for k in 1..max_k]}}
+    Return a list of (distance, is_positive) where positive = same series.
     """
-    series_to_query_pr: Dict[str, Dict[str, List[Tuple[float, float]]]] = {}
-    
-    for series, images in series_to_images.items():
-        if len(images) <= 1:
-            raise ValueError(f"Series '{series}' needs at least 2 images, has {len(images)}.")
-        
-        preds_by_image = build_predictions_by_image(images, rankings)
-        query_to_pr: Dict[str, List[Tuple[float, float]]] = {}
-        
-        for query in images:
-            positives = set(images) - {query}
-            preds = preds_by_image[query]
-            
-            pr_by_k: List[Tuple[float, float]] = []
-            for k in range(1, max_k + 1):
-                prec = precision_at_k(preds, positives, k)
-                rec = recall_at_k(preds, positives, k)
-                pr_by_k.append((prec, rec))
-            
-            query_to_pr[query] = pr_by_k
-        
-        series_to_query_pr[series] = query_to_pr
-    
-    return series_to_query_pr
+    image_to_series = build_image_to_series_map(series_to_images)
+    labeled: List[Tuple[float, bool]] = []
+
+    for entry in pairwise_entries:
+        img1_raw = entry["image1"]
+        img2_raw = entry["image2"]
+        img1_src = id_to_path.get(img1_raw, img1_raw) if id_to_path else img1_raw
+        img2_src = id_to_path.get(img2_raw, img2_raw) if id_to_path else img2_raw
+
+        img1 = normalize_pairwise_path(img1_src)
+        img2 = normalize_pairwise_path(img2_src)
+
+        if img1 not in image_to_series or img2 not in image_to_series:
+            continue
+
+        same_series = image_to_series[img1] == image_to_series[img2]
+        labeled.append((float(entry["distance"]), same_series))
+
+    return labeled
 
 
-# ----------------------------
-# Output
-# ----------------------------
+def _sweep_thresholds(
+    labeled_distances: List[Tuple[float, bool]], thresholds: List[float]
+) -> List[dict]:
+    """
+    Compute precision/recall/FPR at each distance threshold.
+    """
+    results: List[dict] = []
+    total_pos = sum(1 for _, is_pos in labeled_distances if is_pos)
+    total_neg = len(labeled_distances) - total_pos
+
+    for t in thresholds:
+        tp = fp = 0
+        for dist, is_pos in labeled_distances:
+            if dist <= t:
+                if is_pos:
+                    tp += 1
+                else:
+                    fp += 1
+        fn = total_pos - tp
+        tn = total_neg - fp
+
+        precision = tp / (tp + fp) if (tp + fp) else 0.0
+        recall = tp / (tp + fn) if (tp + fn) else 0.0
+        fpr = fp / (fp + tn) if (fp + tn) else 0.0
+
+        results.append(
+            {
+                "threshold": t,
+                "tp": tp,
+                "fp": fp,
+                "fn": fn,
+                "precision": precision,
+                "recall": recall,
+                "fpr": fpr,
+            }
+        )
+    return results
 
 
-def plot_precision_recall_curves(
-    series_to_query_pr: Dict[str, Dict[str, List[Tuple[float, float]]]], 
-    output_path: str
-) -> None:
-    """Generate precision-recall curve plot showing individual query curves grouped by series."""
-    if not MATPLOTLIB_AVAILABLE:
-        print("Warning: matplotlib not available, skipping plot generation")
+def _auto_thresholds(labeled_distances: List[Tuple[float, bool]], num: int = 200) -> List[float]:
+    """
+    Generate evenly spaced thresholds over the observed distance range.
+    """
+    if not labeled_distances:
+        return []
+    distances = [d for d, _ in labeled_distances]
+    d_min, d_max = min(distances), max(distances)
+    if d_min == d_max:
+        return [d_min]
+    return np.linspace(d_min, d_max, num).tolist()
+
+
+def _write_csv(rows: List[dict], output_csv: str) -> None:
+    import csv
+
+    out_path = ensure_output_dir(output_csv)
+    with open(out_path, "w", newline="") as f:
+        writer = csv.DictWriter(
+            f, fieldnames=["threshold", "precision", "recall", "fpr", "tp", "fp", "fn"]
+        )
+        writer.writeheader()
+        for row in rows:
+            writer.writerow(
+                {
+                    "threshold": row["threshold"],
+                    "precision": f"{row['precision']:.6f}",
+                    "recall": f"{row['recall']:.6f}",
+                    "fpr": f"{row['fpr']:.6f}",
+                    "tp": row["tp"],
+                    "fp": row["fp"],
+                    "fn": row["fn"],
+                }
+            )
+
+
+def _plot_pr(rows: List[dict], output_plot: str, signal_type: str) -> None:
+    if not MATPLOTLIB_AVAILABLE or not rows:
         return
-    
-    plt.figure(figsize=(12, 8))
-    
-    # Define color palette for series
-    colors = plt.cm.tab10(range(len(series_to_query_pr)))
-    
-    for (series, query_to_pr), color in zip(sorted(series_to_query_pr.items()), colors):
-        # Plot each query in this series with same color but lighter
-        for i, (query, pr_values) in enumerate(query_to_pr.items()):
-            recalls = [rec for _, rec in pr_values]
-            precisions = [prec for prec, _ in pr_values]
-            
-            # First query gets label for legend, others don't
-            label = series if i == 0 else None
-            plt.plot(recalls, precisions, color=color, alpha=0.4, linewidth=1.5, label=label)
-    
-    plt.xlabel('Recall', fontsize=12)
-    plt.ylabel('Precision', fontsize=12)
-    plt.title('Precision-Recall Curves (Individual Queries by Series)', fontsize=14, fontweight='bold')
-    plt.legend(loc='best', fontsize=10)
+    recalls = [r["recall"] for r in rows]
+    precisions = [r["precision"] for r in rows]
+    plt.figure(figsize=(8, 6))
+    plt.plot(recalls, precisions, marker="o", linewidth=1.5)
+    plt.xlabel("Recall")
+    plt.ylabel("Precision")
+    plt.title(f"Classification Precision-Recall (threshold sweep) [{signal_type}]")
+    plt.xlim([0, 1])
+    plt.ylim([0, 1.05])
     plt.grid(True, alpha=0.3)
-    plt.xlim([0.0, 1.0])
-    plt.ylim([0.0, 1.05])
-    
-    out_path = ensure_output_dir(output_path)
-    plt.savefig(out_path, dpi=150, bbox_inches='tight')
+    out_path = ensure_output_dir(output_plot)
+    plt.savefig(out_path, dpi=150, bbox_inches="tight")
     plt.close()
 
 
-def write_precision_recall_csv(
-    series_to_pr: Dict[str, List[Tuple[float, float]]], 
-    output_csv: str
-) -> None:
-    """Write precision-recall data to CSV (series, k, precision, recall format)."""
-    out_path = ensure_output_dir(output_csv)
-    
-    with open(out_path, "w", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=["series", "k", "precision", "recall"])
-        writer.writeheader()
-        
-        for series, pr_values in sorted(series_to_pr.items()):
-            for k, (prec, rec) in enumerate(pr_values, start=1):
-                writer.writerow({
-                    "series": series,
-                    "k": k,
-                    "precision": f"{prec:.6f}",
-                    "recall": f"{rec:.6f}"
-                })
-
-
 def compute_precision_recall_from_pairwise(
-    labels_path: str, 
-    pairwise_path: str, 
+    labels_path: str,
+    pairwise_path: str,
     output_csv: str,
     output_plot: Optional[str] = None,
-    anon_map_path: Optional[str] = None
+    anon_map_path: Optional[str] = None,
+    signal_type: str = "",
 ) -> None:
-    """Compute Precision-Recall@k from pairwise results and generate outputs."""
     series_to_images, entries, id_to_path = load_and_validate_data(
         labels_path, pairwise_path, anon_map_path
     )
-    
-    rankings = build_rankings(entries, id_to_path)
-    max_k = max(len(v) for v in series_to_images.values())
-    series_to_query_pr = compute_series_precision_recall(series_to_images, rankings, max_k)
-    
-    write_precision_recall_csv(series_to_query_pr, output_csv)
-    
+    labeled = _collect_labeled_distances(series_to_images, entries, id_to_path)
+    thresholds = _auto_thresholds(labeled)
+    rows = _sweep_thresholds(labeled, thresholds)
+    _write_csv(rows, output_csv)
     if output_plot:
-        plot_precision_recall_curves(series_to_query_pr, output_plot)
-
-
-# ----------------------------
-# CLI
-# ----------------------------
+        _plot_pr(rows, output_plot, signal_type)
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Compute Precision-Recall@k curves from pairwise distances."
+        description="Compute classification PR (threshold sweep) from pairwise distances."
     )
-    parser.add_argument(
-        "--labels", required=True,
-        help="Path to labels JSON (series -> list of image paths)."
-    )
-    parser.add_argument(
-        "--pairwise", required=True,
-        help="Path to pairwise results JSON."
-    )
-    parser.add_argument(
-        "--output_csv", required=True,
-        help="Output CSV path."
-    )
-    parser.add_argument(
-        "--output_plot",
-        help="Output plot path (PNG/PDF). If not provided, no plot is generated."
-    )
-    parser.add_argument(
-        "--anon_map",
-        help="Optional path to anon ID map JSON."
-    )
+    parser.add_argument("--labels", required=True, help="Path to labels JSON.")
+    parser.add_argument("--pairwise", required=True, help="Path to pairwise results JSON.")
+    parser.add_argument("--output_csv", required=True, help="Output CSV path.")
+    parser.add_argument("--output_plot", help="Optional output plot path.")
+    parser.add_argument("--anon_map", help="Optional anon ID map JSON.")
+    parser.add_argument("--signal_type", default="", help="Signal type label for plots.")
     args = parser.parse_args()
-    
+
     compute_precision_recall_from_pairwise(
-        args.labels, 
-        args.pairwise, 
+        args.labels,
+        args.pairwise,
         args.output_csv,
         args.output_plot,
-        args.anon_map
+        args.anon_map,
+        args.signal_type,
     )
 
 
 if __name__ == "__main__":
     main()
+

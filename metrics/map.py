@@ -1,14 +1,68 @@
+"""Mean Average Precision (mAP) computation for image retrieval.
+
+Note: The build_rankings function was originally authored by @prasannals
+and refactored from tests/test_utils.py to this module.
+"""
 import argparse
 import csv
-import sys
 from pathlib import Path
 from typing import Dict, List, Set, Tuple, Optional
 
-# Add parent directory to path to import from tests
-sys.path.insert(0, str(Path(__file__).parent.parent))
+from metrics.common import load_and_validate_data, ensure_output_dir, normalize_pairwise_path
 
-from metrics.common import load_and_validate_data, build_predictions_by_image, ensure_output_dir
-from tests.test_utils import build_rankings
+
+def build_rankings(
+    entries: List[dict], id_to_path: Optional[Dict[str, str]] = None
+) -> Dict[str, List[Tuple[str, float]]]:
+    """
+    Build a neighbor ranking for each image:
+    - For each pair (a, b, d), add (b, d) to a's list and (a, d) to b's list.
+    - If duplicate pairs occur, keep the smallest distance.
+    - Sort neighbor lists by ascending distance.
+    Returns dict: image_path -> list of (neighbor_path, distance) tuples.
+    """
+    neighbors: Dict[str, Dict[str, float]] = {}
+
+    for item in entries:
+        a_raw = item["image1"]
+        b_raw = item["image2"]
+        d = item["distance"]
+        a_src = id_to_path.get(a_raw, a_raw) if id_to_path else a_raw
+        b_src = id_to_path.get(b_raw, b_raw) if id_to_path else b_raw
+        a = normalize_pairwise_path(a_src)
+        b = normalize_pairwise_path(b_src)
+
+        if a == b:
+            continue
+        if a not in neighbors:
+            neighbors[a] = {}
+        if b not in neighbors:
+            neighbors[b] = {}
+
+        if b not in neighbors[a] or d < neighbors[a][b]:
+            neighbors[a][b] = d
+        if a not in neighbors[b] or d < neighbors[b][a]:
+            neighbors[b][a] = d
+
+    rankings: Dict[str, List[Tuple[str, float]]] = {}
+    for img, nbrs in neighbors.items():
+        rankings[img] = sorted(nbrs.items(), key=lambda kv: kv[1])
+    return rankings
+
+
+def build_predictions_by_image(
+    images: Set[str],
+    rankings: Dict[str, List[Tuple[str, float]]]
+) -> Dict[str, List[str]]:
+    """
+    Build per-image prediction lists from rankings.
+    Returns: dict mapping image -> list of neighbor paths (excluding self).
+    """
+    preds_by_image: Dict[str, List[str]] = {}
+    for img in images:
+        ranked = rankings.get(img, [])
+        preds_by_image[img] = [nbr for (nbr, _) in ranked if nbr != img]
+    return preds_by_image
 
 
 # ----------------------------

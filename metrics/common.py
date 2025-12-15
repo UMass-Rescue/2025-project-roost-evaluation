@@ -3,18 +3,206 @@ import sys
 from pathlib import Path
 from typing import Dict, List, Set, Tuple, Optional
 
-# Add parent directory to path to import from tests
-sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from tests.test_utils import (
-    load_labels,
-    load_pairwise,
-    load_anon_id_map,
-    validate_inputs,
-    build_rankings,
-    build_image_to_series_map,
-    normalize_pairwise_path,
-)
+def normalize_label_path(path_str: str) -> str:
+    """Normalize label paths by removing leading ./ and /."""
+    p = path_str.replace("\\", "/")
+    if p.startswith("./"):
+        p = p[2:]
+    if p.startswith("/"):
+        p = p[1:]
+    return p
+
+
+def normalize_pairwise_path(path_str: str) -> str:
+    """Normalize pairwise result paths, stripping container mount prefixes."""
+    p = path_str.replace("\\", "/")
+    if p.startswith("/build/"):
+        p = p[len("/build/"):]
+    elif p.startswith("build/"):
+        p = p[len("build/"):]
+    if p.startswith("./"):
+        p = p[2:]
+    if p.startswith("/"):
+        p = p[1:]
+    return p
+
+
+def extract_distance(value) -> float:
+    """Handle distance provided as a number, string, or as an object like { "distance": num }."""
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        return float(value)
+    if isinstance(value, dict):
+        dist_val = value.get("distance")
+        if isinstance(dist_val, (int, float)):
+            return float(dist_val)
+        if isinstance(dist_val, str):
+            return float(dist_val)
+    raise ValueError(f"Unsupported distance format: {value!r}")
+
+
+def load_labels(labels_path: str) -> Dict[str, Set[str]]:
+    """
+    Load series labels from JSON file.
+    Returns dict: series_name -> set of normalized image paths.
+    """
+    with open(labels_path, "r") as f:
+        data = json.load(f)
+    series_to_images: Dict[str, Set[str]] = {}
+    for series, paths in data.items():
+        if not isinstance(paths, list):
+            raise ValueError(f"Labels for series '{series}' must be a list of paths.")
+        normalized: Set[str] = set()
+        for idx, path in enumerate(paths):
+            if not isinstance(path, str):
+                raise ValueError(
+                    f"Labels for series '{series}' must be strings; "
+                    f"found {type(path).__name__} at index {idx}."
+                )
+            normalized.add(normalize_label_path(path))
+        series_to_images[series] = normalized
+    return series_to_images
+
+
+def load_pairwise(pairwise_path: str) -> List[dict]:
+    """
+    Load pairwise results, skipping entries with missing/invalid distance.
+    Returns list of dicts with 'image1', 'image2', and 'distance' fields.
+    """
+    with open(pairwise_path, "r") as f:
+        data = json.load(f)
+    if not isinstance(data, list):
+        raise ValueError("Pairwise results must be a JSON list.")
+    normalized_entries: List[dict] = []
+    skipped_count = 0
+    for idx, item in enumerate(data):
+        if not isinstance(item, dict):
+            raise ValueError(f"Pairwise entry at index {idx} must be a JSON object.")
+        if "image1" not in item or "image2" not in item:
+            raise ValueError(
+                f"Pairwise entry at index {idx} must have 'image1' and 'image2'."
+            )
+        a = item.get("image1")
+        b = item.get("image2")
+        if not isinstance(a, str) or not isinstance(b, str):
+            raise ValueError(
+                f"Pairwise entry at index {idx} must have 'image1' and 'image2' as strings."
+            )
+        try:
+            d = extract_distance(item.get("distance"))
+        except (ValueError, KeyError, TypeError):
+            skipped_count += 1
+            continue
+        normalized_entries.append({"image1": a, "image2": b, "distance": d})
+    
+    if skipped_count > 0:
+        print(
+            f"Warning: Skipped {skipped_count} pairwise entries due to missing/invalid distances. "
+            "This may result in some images having fewer or no neighbors."
+        )
+    return normalized_entries
+
+
+def load_anon_id_map(anon_map_path: Optional[str]) -> Optional[Dict[str, str]]:
+    """
+    Load a path->id mapping JSON and invert it to id->path.
+    Returns None if anon_map_path is None.
+    """
+    if not anon_map_path:
+        return None
+    with open(anon_map_path, "r") as f:
+        mapping = json.load(f)
+    if not isinstance(mapping, dict):
+        raise ValueError("Anonymous ID map must be a JSON object of {path: id}.")
+    id_to_path: Dict[str, str] = {}
+    for path_str, anon_id in mapping.items():
+        if not isinstance(path_str, str) or not isinstance(anon_id, str):
+            raise ValueError("Anonymous ID map must use string keys and string values.")
+        if anon_id in id_to_path:
+            raise ValueError(
+                f"Anonymous ID map must be 1:1; {anon_id} is used more than once."
+            )
+        id_to_path[anon_id] = path_str
+    return id_to_path
+
+
+def collect_pairwise_paths(
+    entries: List[dict], id_to_path: Optional[Dict[str, str]] = None
+) -> Set[str]:
+    """
+    Collect all normalized image paths present in pairwise entries, applying
+    anon-ID mapping if provided.
+    Preconditions: entries have been validated by load_pairwise().
+    """
+    found: Set[str] = set()
+    for item in entries:
+        img1 = item["image1"]
+        img2 = item["image2"]
+        src1 = id_to_path.get(img1, img1) if id_to_path else img1
+        src2 = id_to_path.get(img2, img2) if id_to_path else img2
+        found.add(normalize_pairwise_path(src1))
+        found.add(normalize_pairwise_path(src2))
+    return found
+
+
+def validate_inputs(
+    series_to_images: Dict[str, Set[str]],
+    pairwise_entries: List[dict],
+    id_to_path: Optional[Dict[str, str]] = None,
+) -> None:
+    """
+    Ensure all labeled images are present in the pairwise results (as either image1 or image2),
+    accounting for '/build/' prefix on container paths.
+    """
+    pairwise_paths = collect_pairwise_paths(pairwise_entries, id_to_path)
+
+    missing: List[str] = []
+    for series, images in series_to_images.items():
+        for p in images:
+            if p not in pairwise_paths:
+                missing.append(p)
+    if missing:
+        missing_preview = "\n  ".join(missing[:20])
+        more = "" if len(missing) <= 20 else f"\n  ... and {len(missing) - 20} more"
+        raise ValueError(
+            "Validation failed: the following labeled images are not present in pairwise results "
+            "(after normalizing container '/build/' prefixes):\n  "
+            f"{missing_preview}{more}"
+        )
+
+
+def build_image_to_series_map(series_to_images: Dict[str, Set[str]]) -> Dict[str, str]:
+    """
+    Build reverse mapping from image path to series name.
+    Returns dict: image_path -> series_name.
+    """
+    image_to_series: Dict[str, str] = {}
+    for series, images in series_to_images.items():
+        for img in images:
+            image_to_series[img] = series
+    return image_to_series
+
+
+def validate_series_metadata_exists(labels_path: str = None) -> None:
+    """Validate series metadata file exists and has valid data."""
+    if labels_path is None:
+        labels_path = "resources/labels/images_series_labels.json"
+    
+    if not Path(labels_path).exists():
+        raise ValueError(f"Series metadata not found: {labels_path}")
+    
+    series_to_images = load_labels(labels_path)
+    
+    if not series_to_images:
+        raise ValueError(f"Series metadata is empty: {labels_path}")
+    
+    invalid = [f"{s} ({len(imgs)} images)" for s, imgs in series_to_images.items() if len(imgs) < 2]
+    if invalid:
+        raise ValueError(f"Series must have ≥2 images: {', '.join(invalid)}")
+    
+    print(f"✓ Series metadata validated: {len(series_to_images)} series found")
 
 
 def load_and_validate_data(
@@ -31,21 +219,6 @@ def load_and_validate_data(
     id_to_path = load_anon_id_map(anon_map_path)
     validate_inputs(series_to_images, entries, id_to_path)
     return series_to_images, entries, id_to_path
-
-
-def build_predictions_by_image(
-    images: Set[str],
-    rankings: Dict[str, List[Tuple[str, float]]]
-) -> Dict[str, List[str]]:
-    """
-    Build per-image prediction lists from rankings.
-    Returns: dict mapping image -> list of neighbor paths (excluding self).
-    """
-    preds_by_image: Dict[str, List[str]] = {}
-    for img in images:
-        ranked = rankings.get(img, [])
-        preds_by_image[img] = [nbr for (nbr, _) in ranked if nbr != img]
-    return preds_by_image
 
 
 def classify_pairwise_by_series(
@@ -69,12 +242,15 @@ def classify_pairwise_by_series(
     classified: List[Tuple[float, bool]] = []
     
     for entry in pairwise_entries:
+        # Apply anon-ID mapping if provided
         img1_src = id_to_path.get(entry["image1"], entry["image1"]) if id_to_path else entry["image1"]
         img2_src = id_to_path.get(entry["image2"], entry["image2"]) if id_to_path else entry["image2"]
         
+        # Normalize paths to handle container mount prefixes
         img1 = normalize_pairwise_path(img1_src)
         img2 = normalize_pairwise_path(img2_src)
         
+        # Skip if either image is not in any series
         if img1 not in image_to_series or img2 not in image_to_series:
             continue
         

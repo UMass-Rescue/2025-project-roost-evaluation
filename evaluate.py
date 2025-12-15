@@ -515,10 +515,10 @@ def calculate_metrics(results_dir):
     from metrics.map import compute_map_from_pairwise
     from metrics.precision_recall import compute_precision_recall_from_pairwise
     from metrics.distance_distribution import compute_distance_distribution
+    from metrics.common import validate_series_metadata_exists
     
     labels_path = Path("resources/labels/images_series_labels.json")
     
-    from tests.test_utils import validate_series_metadata_exists
     try:
         validate_series_metadata_exists(str(labels_path))
     except ValueError as e:
@@ -606,7 +606,7 @@ def run_all_tests():
     _log_info("[STARTUP] Creating fresh database for test run...")
     print("Running tests...")
     
-    from tests.test_utils import validate_series_metadata_exists
+    from metrics.common import validate_series_metadata_exists
     try:
         validate_series_metadata_exists()
     except ValueError as e:

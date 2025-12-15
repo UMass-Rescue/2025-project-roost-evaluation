@@ -4,13 +4,14 @@ RUN apt-get update && apt-get install -y iputils-ping && rm -rf /var/lib/apt/lis
 
 WORKDIR /build
 
+COPY requirements.txt /build/
+RUN pip install --no-cache-dir -r requirements.txt
+
 COPY evaluate.py /build/
 COPY tests/ /build/tests/
 COPY metrics/ /build/metrics/
 COPY resources/images /build/resources/images
-COPY resources/labels /build/resources/labels
-
-RUN pip install requests numpy scipy psycopg2-binary tqdm 
+COPY resources/labels /build/resources/labels 
 
 # Set default image directory, can be overridden at runtime
 ENV IMAGE_INPUT_DIR=/build/resources/images

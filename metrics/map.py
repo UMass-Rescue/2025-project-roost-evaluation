@@ -1,8 +1,4 @@
-"""Mean Average Precision (mAP) computation for image retrieval.
-
-Note: The build_rankings function was originally authored by @prasannals
-and refactored from tests/test_utils.py to this module.
-"""
+"""Mean Average Precision (mAP) computation for image retrieval."""
 import argparse
 import csv
 from pathlib import Path

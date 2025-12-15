@@ -1,5 +1,4 @@
 import argparse
-import sys
 from pathlib import Path
 from typing import Dict, List, Set, Tuple, Optional
 
@@ -10,9 +9,6 @@ try:
     MATPLOTLIB_AVAILABLE = True
 except ImportError:
     MATPLOTLIB_AVAILABLE = False
-
-# Add parent directory to path to import from tests
-sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from metrics.common import load_and_validate_data, ensure_output_dir, classify_pairwise_by_series
 

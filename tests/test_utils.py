@@ -1,4 +1,3 @@
-"""Test utilities for evaluation tests."""
 import os
 import json
 import binascii
@@ -9,7 +8,6 @@ from evaluate import image_input_dir
 from tests.path_id_store import PathIdStore
 
 ANON_ENV_FLAG = "DEANONYMIZE_IMAGE_PATHS"
-
 
 def get_image_files(image_dir=None):
     """Return sorted list of image file paths from the given directory (default: resources/images or $IMAGE_INPUT_DIR)."""

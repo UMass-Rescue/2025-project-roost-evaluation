@@ -70,7 +70,19 @@ make run-evaluation   # Runs all tests locally
 
 ### Performance Metrics & Visualizations
 
-After running tests, metrics and graphs are automatically generated. You can also compute them manually:
+After running tests with `EVAL_MODE=test`, metrics and graphs are **automatically generated** and saved to:
+```
+OUTPUT_DIR/evaluation_results/<timestamp>/
+├── pairwise_<signal_type>_compare.json
+├── map_by_series_<signal_type>_results.csv
+├── precision_recall_<signal_type>_results.csv
+├── precision_recall_<signal_type>_curve.png
+└── distance_distribution_<signal_type>.png
+```
+
+Example: `./results/evaluation_results/20251215_193616/`
+
+You can also compute metrics manually:
 
 **mAP (Mean Average Precision):**
 ```bash
@@ -98,11 +110,60 @@ python metrics/distance_distribution.py \
   --signal_type clip
 ```
 
-**Automatic generation:** All metrics and graphs are automatically created when running the full test suite.
+**What gets generated automatically:**
+- **MAP CSV**: Mean Average Precision for each series at different k values
+- **Precision-Recall CSV**: Threshold sweep results with TP/FP/FN counts
+- **Precision-Recall Plot**: Visualization of the precision-recall curve
+- **Distance Distribution Plot**: Side-by-side histograms (same-series vs different-series)
+
+The terminal will show which files were created, e.g.:
+```
+✓ All tests completed.
+Calculating MAP metrics...
+  MAP@k for clip... ✓
+    → map_by_series_clip_results.csv
+  Classification PR for clip... ✓
+    → precision_recall_clip_results.csv
+    → precision_recall_clip_curve.png
+  Distance distribution for clip... ✓
+    → distance_distribution_clip.png
+```
 
 Notes:
 - Paths in pairwise JSON generated inside Docker may start with `/build/`; the scripts normalize these automatically.
 - All metrics support `--anon_map` parameter if using anonymized paths.
+
+## Series Metadata
+
+### What is a Series?
+
+A **series** is a group of related images that should be recognized as similar by the matching system. Examples:
+- Multiple photos of the same person (e.g., "Barbara_Walters")
+- The same scene with transformations (rotations, flips)
+- The same image with different filters applied
+
+Series are defined in `resources/labels/images_series_labels.json`:
+
+```json
+{
+  "series_name": [
+    "./resources/images/image1.jpg",
+    "./resources/images/image2.jpg"
+  ]
+}
+```
+
+### Series Requirements
+
+- Each series must contain **at least 2 images**
+- Series metadata is **required** for running metrics
+- The evaluation automatically validates series metadata before running
+- If metadata is missing or invalid, tests will fail with a clear error message
+
+The series metadata is used to:
+- Calculate MAP (Mean Average Precision) for each series
+- Determine ground truth for precision/recall calculations
+- Separate distance distributions into same-series vs different-series pairs
 
 ## Test Logs
 

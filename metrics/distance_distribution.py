@@ -14,13 +14,7 @@ except ImportError:
 # Add parent directory to path to import from tests
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from metrics.common import load_and_validate_data, ensure_output_dir
-from tests.test_utils import normalize_pairwise_path, build_image_to_series_map
-
-
-# ----------------------------
-# Distance distribution analysis
-# ----------------------------
+from metrics.common import load_and_validate_data, ensure_output_dir, classify_pairwise_by_series
 
 
 def classify_pairwise_distances(
@@ -32,34 +26,12 @@ def classify_pairwise_distances(
     Classify pairwise distances into same-series and different-series.
     Returns: (same_series_distances, different_series_distances)
     """
-    image_to_series = build_image_to_series_map(series_to_images)
+    labeled = classify_pairwise_by_series(series_to_images, pairwise_entries, id_to_path)
     
-    same_series_distances: List[float] = []
-    different_series_distances: List[float] = []
-    
-    for entry in pairwise_entries:
-        # Apply anon-ID mapping and normalize
-        img1_src = id_to_path.get(entry["image1"], entry["image1"]) if id_to_path else entry["image1"]
-        img2_src = id_to_path.get(entry["image2"], entry["image2"]) if id_to_path else entry["image2"]
-        img1 = normalize_pairwise_path(img1_src)
-        img2 = normalize_pairwise_path(img2_src)
-        
-        # Skip if either image is not in any series
-        if img1 not in image_to_series or img2 not in image_to_series:
-            continue
-        
-        # Classify based on series membership
-        if image_to_series[img1] == image_to_series[img2]:
-            same_series_distances.append(entry["distance"])
-        else:
-            different_series_distances.append(entry["distance"])
+    same_series_distances = [distance for distance, is_same in labeled if is_same]
+    different_series_distances = [distance for distance, is_same in labeled if not is_same]
     
     return same_series_distances, different_series_distances
-
-
-# ----------------------------
-# Output
-# ----------------------------
 
 
 def plot_distance_distributions(
@@ -127,11 +99,6 @@ def compute_distance_distribution(
     print(f"Different-series pairs: {len(diff_distances)}")
     
     plot_distance_distributions(same_distances, diff_distances, output_plot, signal_type)
-
-
-# ----------------------------
-# CLI
-# ----------------------------
 
 
 def main():

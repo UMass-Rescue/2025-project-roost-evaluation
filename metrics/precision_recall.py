@@ -16,37 +16,7 @@ except ImportError:
 # Add parent directory to path to import from tests
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from metrics.common import load_and_validate_data, ensure_output_dir
-from tests.test_utils import normalize_pairwise_path, build_image_to_series_map
-
-
-def _collect_labeled_distances(
-    series_to_images: Dict[str, set],
-    pairwise_entries: List[dict],
-    id_to_path: Optional[Dict[str, str]] = None,
-) -> List[Tuple[float, bool]]:
-    """
-    Return a list of (distance, is_positive) where positive = same series.
-    """
-    image_to_series = build_image_to_series_map(series_to_images)
-    labeled: List[Tuple[float, bool]] = []
-
-    for entry in pairwise_entries:
-        img1_raw = entry["image1"]
-        img2_raw = entry["image2"]
-        img1_src = id_to_path.get(img1_raw, img1_raw) if id_to_path else img1_raw
-        img2_src = id_to_path.get(img2_raw, img2_raw) if id_to_path else img2_raw
-
-        img1 = normalize_pairwise_path(img1_src)
-        img2 = normalize_pairwise_path(img2_src)
-
-        if img1 not in image_to_series or img2 not in image_to_series:
-            continue
-
-        same_series = image_to_series[img1] == image_to_series[img2]
-        labeled.append((float(entry["distance"]), same_series))
-
-    return labeled
+from metrics.common import load_and_validate_data, ensure_output_dir, classify_pairwise_by_series
 
 
 def _sweep_thresholds(
@@ -153,7 +123,7 @@ def compute_precision_recall_from_pairwise(
     series_to_images, entries, id_to_path = load_and_validate_data(
         labels_path, pairwise_path, anon_map_path
     )
-    labeled = _collect_labeled_distances(series_to_images, entries, id_to_path)
+    labeled = classify_pairwise_by_series(series_to_images, entries, id_to_path)
     thresholds = _auto_thresholds(labeled)
     rows = _sweep_thresholds(labeled, thresholds)
     _write_csv(rows, output_csv)

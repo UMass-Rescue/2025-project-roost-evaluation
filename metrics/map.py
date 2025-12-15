@@ -138,11 +138,6 @@ def compute_map_from_pairwise(
     write_series_map_csv(series_to_map, output_csv)
 
 
-# ----------------------------
-# CLI
-# ----------------------------
-
-
 def main():
     parser = argparse.ArgumentParser(
         description="Compute mAP@k from pairwise image distances and series labels."

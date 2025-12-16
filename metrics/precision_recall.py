@@ -93,10 +93,26 @@ def _write_csv(rows: List[dict], output_csv: str) -> None:
 def _plot_pr(rows: List[dict], output_plot: str, signal_type: str) -> None:
     if not MATPLOTLIB_AVAILABLE or not rows:
         return
-    recalls = [r["recall"] for r in rows]
-    precisions = [r["precision"] for r in rows]
+    
+    recalls = np.array([r["recall"] for r in rows])
+    precisions = np.array([r["precision"] for r in rows])
+    
+    # Add initial point at (0, 1.0) for recall=0
+    recalls = np.concatenate([[0.0], recalls])
+    precisions = np.concatenate([[1.0], precisions])
+    
+    # Sort by recall (should already be sorted from threshold sweep, but ensure it)
+    sorted_indices = np.argsort(recalls)
+    recalls = recalls[sorted_indices]
+    precisions = precisions[sorted_indices]
+    
+    # Apply interpolation to get monotonically decreasing precision (convex hull)
+    # For each recall level, use the maximum precision from that point onward
+    for i in range(len(precisions) - 2, -1, -1):
+        precisions[i] = max(precisions[i], precisions[i + 1])
+    
     plt.figure(figsize=(8, 6))
-    plt.plot(recalls, precisions, marker="o", linewidth=1.5)
+    plt.plot(recalls, precisions, marker="o", linewidth=1.5, markersize=3)
     plt.xlabel("Recall")
     plt.ylabel("Precision")
     plt.title(f"Classification Precision-Recall (threshold sweep) [{signal_type}]")

@@ -16,12 +16,12 @@ def main():
     image_files = get_image_files()
     
     # Determine threshold configuration based on signal type
-    # clip uses int (0-100), clip_float uses float (0.0-1.0)
+    # clip uses int (0-100), clip_float and cliphnsw use float (0.0-1.0)
     if SIGNAL_TYPE == "clip":
         max_threshold = int(os.getenv("THRESHOLD_MAX", "100"))
         step = int(os.getenv("THRESHOLD_STEP", "20"))
         thresholds = list(range(0, max_threshold + 1, step))
-    else:  # clip_float
+    else:  # clip_float, cliphnsw
         import numpy as np
         max_threshold = float(os.getenv("THRESHOLD_MAX", "1.0"))
         step = float(os.getenv("THRESHOLD_STEP", "0.2"))

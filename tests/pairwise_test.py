@@ -28,7 +28,9 @@ def main():
             image_hashes[img] = resp[SIGNAL_TYPE]
             _log_debug(f"Cached hash for {img}")
         else:
-            _log_warning(f"Failed to hash {img}: {resp}")
+            # Hash succeeded but signal type not found - show available signal types
+            available_types = list(resp.keys()) if isinstance(resp, dict) else "unknown"
+            _log_warning(f"Hash response for {img} does not contain signal type '{SIGNAL_TYPE}'. Available types: {available_types}. Response: {resp}")
 
     results = []
     total_pairs = len(list(itertools.combinations(image_files, 2)))

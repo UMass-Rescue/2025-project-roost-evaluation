@@ -99,6 +99,29 @@ def _log_warning(msg):
 def _log_error(msg):
     get_logger().error(msg)
 
+def _bank_content_id_map_path() -> Path:
+    output_root = Path(os.getenv("OUTPUT_DIR", "./results"))
+    return output_root / "file_to_id_map" / "bank_content_id_map.json"
+
+
+def _update_bank_content_id_map(bank_content_id: int, filename: str) -> None:
+    path = _bank_content_id_map_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    existing: dict[str, str] = {}
+    if path.exists():
+        try:
+            with open(path, "r") as f:
+                data = json.load(f)
+            if isinstance(data, dict):
+                existing = {str(k): str(v) for k, v in data.items()}
+        except Exception:
+            existing = {}
+    existing[str(bank_content_id)] = filename
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    with open(tmp, "w") as f:
+        json.dump(existing, f, indent=2)
+    os.replace(tmp, path)
+
 class Evaluator:
     def bank_exists(self,bank_name: str) -> bool:
         """Check if a bank exists by making API call to HMA."""
@@ -155,6 +178,18 @@ class Evaluator:
                 response = requests.post(f"{hma_app_url}/c/bank/{bank_name}/content", files=files)
                 if response.ok:
                     _log_debug(f"Successfully added {filename} to bank {bank_name}")
+                    try:
+                        response_data = response.json()
+                        bank_content_id = None
+                        if isinstance(response_data, dict):
+                            bank_content_id = response_data.get("id") or response_data.get("content_id") or response_data.get("bank_content_id")
+                        elif isinstance(response_data, (int, str)):
+                            bank_content_id = int(response_data)
+                        if bank_content_id is not None:
+                            _update_bank_content_id_map(int(bank_content_id), filename)
+                    except Exception:
+                        pass
+                    
                     return {'status': 'success', 'response': response.text}
                 else:
                     _log_error(f"Failed to add {filename} to bank {bank_name}: {response.status_code} - {response.text}")
@@ -187,31 +222,24 @@ class Evaluator:
 
     def match_local_content(self, file_path: str, signal_type: str) -> dict:
         hasher_resp = self.hash_local_content(file_path)
-        # signal_type can be 'clip' or 'clip_float'
-        
-        # Check if hash was successful and contains the signal type
         if not isinstance(hasher_resp, dict) or signal_type not in hasher_resp:
             return {
                 'status': 'failure',
                 'error': f'Failed to get {signal_type} hash',
                 'response': str(hasher_resp)
             }
-        
         signal = hasher_resp[signal_type]
         data = {
             'signal_type': signal_type,
             'signal': signal
         }
-   
         try:
             response = requests.post(f"{match_url}", json=data)
             if response.ok:
                 result = response.json()
-                #print(json.dumps(result, indent=2))
-                
                 return {
                     'status': 'success',
-                    'matches': result,  # List of matches with bank_content_id, distance, and bank_name
+                    'matches': result,
                     'signal_type': signal_type,
                     'signal': signal
                 }
@@ -222,30 +250,24 @@ class Evaluator:
                     'error': f'API request failed with status {response.status_code}',
                     'response': response.text
                 }
-            
         except RequestException as e:
             _log_debug(f"Request exception: {str(e)}")
             return {'status': 'failure', 'error': str(e)}
 
     def match_local_content_topk(self, file_path: str, k: int, signal_type: str) -> dict:
         hasher_resp = self.hash_local_content(file_path)
-        # signal_type can be 'clip' or 'clip_float'
-        
-        # Check if hash was successful and contains the signal type
         if not isinstance(hasher_resp, dict) or signal_type not in hasher_resp:
             return {
                 'status': 'failure',
                 'error': f'Failed to get {signal_type} hash',
                 'response': str(hasher_resp)
             }
-        
         signal = hasher_resp[signal_type]
         data = {
             'signal_type': signal_type,
             'signal': signal,
             'k': k
         }
-
         try:
             response = requests.post(f"{match_url_topk}", json=data)
             if response.ok:
@@ -263,30 +285,24 @@ class Evaluator:
                     'error': f'API request failed with status {response.status_code}',
                     'response': response.text
                 }
-
         except RequestException as e:
             _log_debug(f"Request exception: {str(e)}")
             return {'status': 'failure', 'error': str(e)}
 
     def match_local_content_threshold(self, file_path: str, threshold: int | float, signal_type: str) -> dict:
         hasher_resp = self.hash_local_content(file_path)
-        # signal_type can be 'clip' (int thresholds) or 'clip_float' (float thresholds)
-        
-        # Check if hash was successful and contains the signal type
         if not isinstance(hasher_resp, dict) or signal_type not in hasher_resp:
             return {
                 'status': 'failure',
                 'error': f'Failed to get {signal_type} hash',
                 'response': str(hasher_resp)
             }
-        
         signal = hasher_resp[signal_type]
         data = {
             'signal_type': signal_type,
             'signal': signal,
             'threshold': threshold
         }
-
         try:
             response = requests.post(f"{match_url_threshold}", json=data)
             if response.ok:
@@ -304,7 +320,6 @@ class Evaluator:
                     'error': f'API request failed with status {response.status_code}',
                     'response': response.text
                 }
-
         except RequestException as e:
             _log_debug(f"Request exception: {str(e)}")
             return {'status': 'failure', 'error': str(e)}

@@ -6,7 +6,6 @@ from pathlib import Path
 from datetime import datetime
 from evaluate import image_input_dir
 from tests.path_id_store import PathIdStore
-
 ANON_ENV_FLAG = "DEANONYMIZE_IMAGE_PATHS"
 
 def get_image_files(image_dir=None):
@@ -36,8 +35,45 @@ def get_results_dir():
     return results_dir
 
 def _should_anonymize() -> bool:
-    # Default ON; set DEANONYMIZE_IMAGE_PATHS=1 to disable anonymization
     return os.getenv(ANON_ENV_FLAG, "").strip() != "1"
+
+
+def _load_bank_content_id_map() -> dict[int, str]:
+    output_root = Path(os.getenv("OUTPUT_DIR", "./results"))
+    path = output_root / "file_to_id_map" / "bank_content_id_map.json"
+    if not path.exists():
+        return {}
+    try:
+        with open(path, "r") as f:
+            data = json.load(f)
+        if not isinstance(data, dict):
+            return {}
+        out: dict[int, str] = {}
+        for k, v in data.items():
+            try:
+                out[int(k)] = str(v)
+            except Exception:
+                continue
+        return out
+    except Exception:
+        return {}
+
+
+def _annotate_bank_content_ids(obj, id_to_filename: dict[int, str]):
+    if isinstance(obj, list):
+        return [_annotate_bank_content_ids(x, id_to_filename) for x in obj]
+    if isinstance(obj, dict):
+        out = {k: _annotate_bank_content_ids(v, id_to_filename) for k, v in obj.items()}
+        if "bank_content_id" in obj:
+            try:
+                cid = int(obj.get("bank_content_id"))
+            except Exception:
+                return out
+            fn = id_to_filename.get(cid)
+            if fn is not None:
+                out["matched_filename"] = fn
+        return out
+    return obj
 
 def _collect_image_paths(results: list[dict]) -> set[str]:
     paths: set[str] = set()
@@ -76,13 +112,18 @@ def write_results(results, filename):
     output_path = results_dir / filename
     results_to_write = results
 
+    if os.getenv("DEANONYMIZE_BANK_CONTENT_IDS", "").strip() == "1":
+        id_map = _load_bank_content_id_map()
+        if id_map:
+            results_to_write = _annotate_bank_content_ids(results_to_write, id_map)
+
     if _should_anonymize():
-        _validate_results_for_anonymization(results)
-        paths = _collect_image_paths(results)
+        _validate_results_for_anonymization(results_to_write)
+        paths = _collect_image_paths(results_to_write)
         # Build IDs using persistent store if ANON_ID_MAP_FILEPATH is set, else in-memory
         store = PathIdStore.from_env()
         id_map = store.get_ids_for_paths(paths)
-        results_to_write = _anonymize_results(results, id_map)
+        results_to_write = _anonymize_results(results_to_write, id_map)
         if store.has_persistence:
             store.save()
 

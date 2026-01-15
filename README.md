@@ -31,13 +31,13 @@ This builds HMA from ThreatExchange at commit `aff3f3b8` and starts:
 
 ### 3. Run Tests
 
-**Smoke test (uses clip_float by default):**
+**Smoke test (iterates through all available signals by default):**
 ```bash
 docker compose run --rm -e BANK_NAME=SMOKE_TEST evaluation
 ```
 The smoke test cleans the database, creates a bank, uploads all images from `resources/images/`, and tests matching.
 
-**All tests (uses clip_float by default):**
+**All tests (iterates through all available signals by default):**
 ```bash
 docker compose run --rm -e EVAL_MODE=test evaluation
 ```
@@ -194,7 +194,7 @@ All test runs create detailed logs in `OUTPUT_DIR/test_run_logs/` (default `./re
 - `EVAL_MODE`: `smoke` (default) or `test`
 - `BANK_NAME`: Bank name for testing (default: `TEST_BANK_DATA`)
 - `SIGNAL_TYPE`: Signal type for matching (optional)
-  - If **not set**: Tests both `clip` and `clip_float` (default behavior)
+  - If **not set**: Iterates through all available signals (default behavior; currently `clip` and `clip_float`)
   - If **set**: Tests only the specified signal type (e.g., `SIGNAL_TYPE=clip`)
   - `clip_float`: Float-based distance/thresholds (0.0-1.0 range)
   - `clip`: Integer-based distance/thresholds (0-100 range)

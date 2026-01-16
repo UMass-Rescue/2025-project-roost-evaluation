@@ -196,11 +196,7 @@ All test runs create detailed logs in `OUTPUT_DIR/test_run_logs/` (default `./re
 - `EVAL_MODE`: `smoke` (default) or `test`
 - `BANK_NAME`: Bank name for testing (default: `TEST_BANK_DATA`)
 - `SIGNAL_TYPE`: Signal type for matching (optional)
-<<<<<<< HEAD
-  - If **not set**: Tests `clip`, `clip_float`, and `cliphnsw` (default behavior)
-=======
-  - If **not set**: Iterates through all available signals (default behavior; currently `clip` and `clip_float`)
->>>>>>> main
+  - If **not set**: Iterates through all available signals (default behavior; currently `clip`, `clip_float`, and `cliphnsw`)
   - If **set**: Tests only the specified signal type (e.g., `SIGNAL_TYPE=clip`)
   - `clip_float`: Float-based distance/thresholds (0.0-1.0 range)
   - `clip`: Integer-based distance/thresholds (0-100 range)

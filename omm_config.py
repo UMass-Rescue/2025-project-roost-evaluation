@@ -24,7 +24,7 @@ from threatexchange.exchanges.impl.fb_threatexchange_api import (
 
 # Import CLIP signal types from the extension
 try:
-    from tx_extension_clip import CLIPSignal, CLIPFloatSignal
+    from tx_extension_clip import CLIPSignal, CLIPFloatSignal, CLIPHNSWSignal
     CLIP_ENABLED = True
 except ImportError:
     CLIP_ENABLED = False
@@ -55,6 +55,7 @@ signal_types = [PdqSignal, VideoMD5Signal]
 if CLIP_ENABLED:
     signal_types.append(CLIPSignal)
     signal_types.append(CLIPFloatSignal)
+    signal_types.append(CLIPHNSWSignal)
 
 STORAGE_IFACE_INSTANCE = DefaultOMMStore(
     signal_types=signal_types,

@@ -196,13 +196,18 @@ All test runs create detailed logs in `OUTPUT_DIR/test_run_logs/` (default `./re
 - `EVAL_MODE`: `smoke` (default) or `test`
 - `BANK_NAME`: Bank name for testing (default: `TEST_BANK_DATA`)
 - `SIGNAL_TYPE`: Signal type for matching (optional)
+<<<<<<< HEAD
+  - If **not set**: Tests `clip`, `clip_float`, and `cliphnsw` (default behavior)
+=======
   - If **not set**: Iterates through all available signals (default behavior; currently `clip` and `clip_float`)
+>>>>>>> main
   - If **set**: Tests only the specified signal type (e.g., `SIGNAL_TYPE=clip`)
   - `clip_float`: Float-based distance/thresholds (0.0-1.0 range)
   - `clip`: Integer-based distance/thresholds (0-100 range)
+  - `cliphnsw`: Float-based distance/thresholds (0.0-1.0 range)
 - `MAX_K`: Maximum k for top-k test (default: `5`)
-- `THRESHOLD_MAX`: Maximum threshold value (default: `100` for clip, `1.0` for clip_float)
-- `THRESHOLD_STEP`: Threshold step size (default: `20` for clip, `0.2` for clip_float)
+- `THRESHOLD_MAX`: Maximum threshold value (default: `100` for clip, `1.0` for clip_float/cliphnsw)
+- `THRESHOLD_STEP`: Threshold step size (default: `20` for clip, `0.2` for clip_float/cliphnsw)
 
 ### HMA Connection (auto-configured in docker-compose)
 - `HMA_HOST`: `hma-app` (internal container name)

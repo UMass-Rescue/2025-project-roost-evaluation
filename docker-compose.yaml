@@ -50,7 +50,7 @@ services:
       context: .
       dockerfile: Dockerfile.hma
       args:
-        THREATEXCHANGE_COMMIT: 2e5f23f
+        THREATEXCHANGE_COMMIT: aff3f3b8
     restart: unless-stopped
     ports:
       - "5005:5100"

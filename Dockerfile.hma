@@ -4,7 +4,7 @@
 FROM python:3.13-bullseye as builder
 
 # Accept build argument for commit hash
-ARG THREATEXCHANGE_COMMIT=2e5f23f
+ARG THREATEXCHANGE_COMMIT=aff3f3b8
 
 # Clone ThreatExchange at the specific commit
 RUN apt-get update && apt-get install -y git patch && rm -rf /var/lib/apt/lists/*
@@ -44,7 +44,7 @@ COPY --from=builder /threatexchange/hasher-matcher-actioner/scripts/ /app/script
 # Install CLIP extension (after HMA is installed and source is available)
 RUN git clone -b main https://github.com/UMass-Rescue/tx-extension-clip.git /app/tx-extension-clip && \
     pip install -e /app/tx-extension-clip && \
-    python -c "from tx_extension_clip import CLIPSignal; print('✓ CLIP extension installed and verified')" || \
+    python -c "from tx_extension_clip import CLIPSignal, CLIPFloatSignal; print('✓ CLIP extension installed and verified')" || \
     (echo "ERROR: CLIP extension installation or import failed" && exit 1)
 
 # Copy reference configs
@@ -54,5 +54,5 @@ COPY --from=builder /threatexchange/hasher-matcher-actioner/reference_omm_config
 COPY omm_config.py /reference_configs/development_omm_config.py
 
 EXPOSE 5100
-CMD ["gunicorn", "--bind", "0.0.0.0:5100", "--timeout", "300", "--workers", "1", "OpenMediaMatch.app:create_app()"]
+CMD ["gunicorn", "--bind", "0.0.0.0:5100", "--timeout", "1200", "--workers", "1", "OpenMediaMatch.app:create_app()"]
 

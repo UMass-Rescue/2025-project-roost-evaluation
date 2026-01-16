@@ -22,13 +22,13 @@ from threatexchange.exchanges.impl.fb_threatexchange_api import (
     FBThreatExchangeSignalExchangeAPI,
 )
 
-# Import CLIP signal type from the extension
+# Import CLIP signal types from the extension
 try:
-    from tx_extension_clip import CLIPSignal
+    from tx_extension_clip import CLIPSignal, CLIPFloatSignal
     CLIP_ENABLED = True
 except ImportError:
     CLIP_ENABLED = False
-    logging.warning("CLIP extension not available. CLIPSignal will not be enabled.")
+    logging.warning("CLIP extension not available. CLIP signals will not be enabled.")
 
 # Database configuration
 DBUSER = "postgres"
@@ -50,10 +50,11 @@ TASK_INDEXER = True
 TASK_INDEX_CACHE = True
 
 # Core functionality configuration
-# Include CLIPSignal if available
+# Include CLIP signals if available
 signal_types = [PdqSignal, VideoMD5Signal]
 if CLIP_ENABLED:
     signal_types.append(CLIPSignal)
+    signal_types.append(CLIPFloatSignal)
 
 STORAGE_IFACE_INSTANCE = DefaultOMMStore(
     signal_types=signal_types,

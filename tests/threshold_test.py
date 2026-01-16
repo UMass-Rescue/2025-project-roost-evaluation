@@ -5,17 +5,28 @@ from tqdm import tqdm
 from tests.test_utils import get_image_files, write_results
 from evaluate import Evaluator, get_logger, _log_info, _log_debug, _log_warning
 
-OUTPUT_FILE = os.getenv("OUTPUT_FILE", "threshold_test_results.json")
-SIGNAL_TYPE = "clip"
-THRESHOLD_MAX = int(os.getenv("THRESHOLD_MAX", 100))
-THRESHOLD_STEP = int(os.getenv("THRESHOLD_STEP", 20))
-
 def main():
+    # Read signal_type from env (fresh each call)
+    SIGNAL_TYPE = os.getenv("SIGNAL_TYPE", "clip_float")
+    OUTPUT_FILE = os.getenv("OUTPUT_FILE", f"threshold_test_{SIGNAL_TYPE}_results.json")
+    
     # Use existing logger if available, otherwise create a simple one
     logger = get_logger()
     evaluator = Evaluator()
     image_files = get_image_files()
-    thresholds = range(0, THRESHOLD_MAX, THRESHOLD_STEP)
+    
+    # Determine threshold configuration based on signal type
+    # clip uses int (0-100), clip_float uses float (0.0-1.0)
+    if SIGNAL_TYPE == "clip":
+        max_threshold = int(os.getenv("THRESHOLD_MAX", "100"))
+        step = int(os.getenv("THRESHOLD_STEP", "20"))
+        thresholds = list(range(0, max_threshold + 1, step))
+    else:  # clip_float
+        import numpy as np
+        max_threshold = float(os.getenv("THRESHOLD_MAX", "1.0"))
+        step = float(os.getenv("THRESHOLD_STEP", "0.2"))
+        num_steps = int(max_threshold / step) + 1
+        thresholds = np.linspace(0.0, max_threshold, num_steps).tolist()
     print(f"[INFO] Found {len(image_files)} images. Starting threshold match test with thresholds={list(thresholds)}...")
     _log_info(f"Found {len(image_files)} images. Starting threshold match test with thresholds={list(thresholds)}...")
 
@@ -27,9 +38,9 @@ def main():
     
     # tqdm for terminal progress, _log_info for log file
     for threshold, img in tqdm(test_items, desc="Threshold test progress", file=sys.stderr, ncols=80, disable=False):
-        _log_info(f"Matching {img} with threshold={threshold}")
+        _log_info(f"Matching {img} with threshold={threshold} using signal_type={SIGNAL_TYPE}")
         
-        match_resp = evaluator.match_local_content_threshold(img, threshold)
+        match_resp = evaluator.match_local_content_threshold(img, threshold, SIGNAL_TYPE)
 
         if match_resp.get("status") == "success":
             matches_count = len(match_resp.get("matches", []))

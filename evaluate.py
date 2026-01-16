@@ -23,6 +23,14 @@ match_url = hma_app_url + "/m/lookup"
 match_url_topk = hma_app_url + "/m/lookup_topk"
 match_url_threshold = hma_app_url + "/m/lookup_threshold"
 
+# Signal types to test
+# Can be overridden via SIGNAL_TYPE env var (e.g., SIGNAL_TYPE=clip)
+_signal_type_env = os.getenv("SIGNAL_TYPE", "").strip()
+if _signal_type_env:
+    SIGNAL_TYPES = [_signal_type_env]
+else:
+    SIGNAL_TYPES = ["clip", "clip_float"]
+
 # Setup logging
 logger = None
 log_file = None
@@ -177,9 +185,9 @@ class Evaluator:
                     'error': str(e)
                 }
 
-    def match_local_content(self, file_path: str) -> dict:
+    def match_local_content(self, file_path: str, signal_type: str) -> dict:
         hasher_resp = self.hash_local_content(file_path)
-        signal_type = 'clip'
+        # signal_type can be 'clip' or 'clip_float'
         
         # Check if hash was successful and contains the signal type
         if not isinstance(hasher_resp, dict) or signal_type not in hasher_resp:
@@ -190,13 +198,13 @@ class Evaluator:
             }
         
         signal = hasher_resp[signal_type]
-        params = {
+        data = {
             'signal_type': signal_type,
             'signal': signal
         }
    
         try:
-            response = requests.get(f"{match_url}", params=params)
+            response = requests.post(f"{match_url}", json=data)
             if response.ok:
                 result = response.json()
                 #print(json.dumps(result, indent=2))
@@ -219,9 +227,9 @@ class Evaluator:
             _log_debug(f"Request exception: {str(e)}")
             return {'status': 'failure', 'error': str(e)}
 
-    def match_local_content_topk(self, file_path: str, k: int) -> dict:
+    def match_local_content_topk(self, file_path: str, k: int, signal_type: str) -> dict:
         hasher_resp = self.hash_local_content(file_path)
-        signal_type = 'clip'
+        # signal_type can be 'clip' or 'clip_float'
         
         # Check if hash was successful and contains the signal type
         if not isinstance(hasher_resp, dict) or signal_type not in hasher_resp:
@@ -232,14 +240,14 @@ class Evaluator:
             }
         
         signal = hasher_resp[signal_type]
-        params = {
+        data = {
             'signal_type': signal_type,
             'signal': signal,
             'k': k
         }
 
         try:
-            response = requests.get(f"{match_url_topk}", params=params)
+            response = requests.post(f"{match_url_topk}", json=data)
             if response.ok:
                 result = response.json()
                 return {
@@ -260,9 +268,9 @@ class Evaluator:
             _log_debug(f"Request exception: {str(e)}")
             return {'status': 'failure', 'error': str(e)}
 
-    def match_local_content_threshold(self, file_path: str, threshold: int) -> dict:
+    def match_local_content_threshold(self, file_path: str, threshold: int | float, signal_type: str) -> dict:
         hasher_resp = self.hash_local_content(file_path)
-        signal_type = 'clip'
+        # signal_type can be 'clip' (int thresholds) or 'clip_float' (float thresholds)
         
         # Check if hash was successful and contains the signal type
         if not isinstance(hasher_resp, dict) or signal_type not in hasher_resp:
@@ -273,14 +281,14 @@ class Evaluator:
             }
         
         signal = hasher_resp[signal_type]
-        params = {
+        data = {
             'signal_type': signal_type,
             'signal': signal,
             'threshold': threshold
         }
 
         try:
-            response = requests.get(f"{match_url_threshold}", params=params)
+            response = requests.post(f"{match_url_threshold}", json=data)
             if response.ok:
                 result = response.json()
                 return {
@@ -334,7 +342,7 @@ class Evaluator:
             result = self.add_file_to_hma_bank(file_path, bank_name)
             _log_debug(result['response'])
 
-    def wait_for_index_update(self, expected_size=None, signal_type="clip", max_wait=60):
+    def wait_for_index_update(self, expected_size=None, signal_type="clip_float", max_wait=60):
         """Wait until index contains new signal or until timeout."""
         _log_info("Waiting for index to update...")
         for _ in range(max_wait // 5):
@@ -347,16 +355,16 @@ class Evaluator:
         _log_warning("Timed out waiting for index update.")
 
 
-    def match_uploaded_files(self, files_to_send):
+    def match_uploaded_files(self, files_to_send, signal_type: str):
         """Match each uploaded file and print the response."""
         _log_info("Sleeping 35 seconds to allow in-memory index cache to refresh...")
         time.sleep(35)
         for match_file_path in files_to_send:
             _log_debug(match_file_path)
-            match_resp = self.match_local_content(match_file_path)
+            match_resp = self.match_local_content(match_file_path, signal_type)
             _log_debug(json.dumps(match_resp, indent=2))
 
-    def compare_hashes(self, hash1, hash2, signal_type="clip") -> dict:
+    def compare_hashes(self, hash1, hash2, signal_type: str) -> dict:
         url = f"{hma_app_url}/m/compare"
         headers = {"Content-Type": "application/json"}
         data = {
@@ -477,10 +485,11 @@ class Evaluator:
             _log_error(traceback.format_exc())
             return False
 
-    def cleanup_test_environment(self, signal_type="clip"):
+    def cleanup_test_environment(self):
         """
         Clean up test environment by clearing all database data.
         This ensures complete isolation - no leftover indexes or data from previous runs.
+        Verifies all signal types are empty.
         """
         _log_info("Cleaning up test environment...")
         
@@ -488,16 +497,108 @@ class Evaluator:
             # Wait for HMA to process the changes
             time.sleep(2)
             
-            # Verify index is empty
-            index_size = self.get_index_size(signal_type)
-            if index_size == 0:
-                _log_info(f"✓ {signal_type} index is empty")
-            else:
-                _log_warning(f"Index size is {index_size}, expected 0")
+            # Verify all indexes are empty
+            for signal_type in SIGNAL_TYPES:
+                index_size = self.get_index_size(signal_type)
+                if index_size == 0:
+                    _log_info(f"✓ {signal_type} index is empty")
+                else:
+                    _log_warning(f"{signal_type} index size is {index_size}, expected 0")
             return True
         else:
             _log_error("Failed to clear database")
             return False
+
+def calculate_metrics(results_dir):
+    """Calculate MAP, classification PR, and distance plots for all signal types."""
+    # Import here to avoid circular dependency
+    from metrics.map import compute_map_from_pairwise
+    from metrics.precision_recall import compute_precision_recall_from_pairwise
+    from metrics.distance_distribution import compute_distance_distribution
+    from metrics.common import validate_series_metadata_exists
+    
+    labels_path = Path("resources/labels/images_series_labels.json")
+    
+    try:
+        validate_series_metadata_exists(str(labels_path))
+    except ValueError as e:
+        print(f"✗ Cannot calculate metrics: {e}")
+        return
+    
+    # Get anon_id_map path using same logic as PathIdStore.from_env()
+    anon_map_override = os.getenv("ANON_ID_MAP_FILEPATH")
+    if anon_map_override and anon_map_override.strip():
+        anon_map_path = Path(anon_map_override.strip())
+    else:
+        output_root = Path(os.getenv("OUTPUT_DIR", "./results"))
+        anon_map_path = output_root / "file_to_id_map" / "anon_id_map.json"
+    
+    for signal_type in SIGNAL_TYPES:
+        pairwise_file = results_dir / f"pairwise_{signal_type}_compare.json"
+        
+        if not pairwise_file.exists():
+            _log_warning(f"Pairwise results not found: {pairwise_file}")
+            continue
+        
+        # Compute MAP
+        map_output_csv = results_dir / f"map_by_series_{signal_type}_results.csv"
+        try:
+            _log_info(f"Computing MAP metric for {signal_type}...")
+            print(f"  MAP@k for {signal_type}...", end=" ", flush=True)
+            compute_map_from_pairwise(
+                str(labels_path),
+                str(pairwise_file),
+                str(map_output_csv),
+                str(anon_map_path) if anon_map_path.exists() else None
+            )
+            print(f"✓")
+            _log_info(f"Saved to: {map_output_csv}")
+            print(f"    → {map_output_csv.name}")
+        except Exception as e:
+            print(f"✗ {e}")
+            _log_error(f"Failed to compute MAP for {signal_type}: {e}")
+        
+        # Compute classification Precision-Recall (threshold sweep)
+        pr_csv = results_dir / f"precision_recall_{signal_type}_results.csv"
+        pr_plot = results_dir / f"precision_recall_{signal_type}_curve.png"
+        try:
+            _log_info(f"Computing classification Precision-Recall for {signal_type}...")
+            print(f"  Classification PR for {signal_type}...", end=" ", flush=True)
+            compute_precision_recall_from_pairwise(
+                str(labels_path),
+                str(pairwise_file),
+                str(pr_csv),
+                str(pr_plot),
+                str(anon_map_path) if anon_map_path.exists() else None,
+                signal_type,
+            )
+            print(f"✓")
+            _log_info(f"Saved CSV: {pr_csv}")
+            _log_info(f"Saved plot: {pr_plot}")
+            print(f"    → {pr_csv.name}")
+            print(f"    → {pr_plot.name}")
+        except Exception as e:
+            print(f"✗ {e}")
+            _log_error(f"Failed to compute classification PR for {signal_type}: {e}")
+        
+        # Generate distance distribution histograms
+        dist_output_plot = results_dir / f"distance_distribution_{signal_type}.png"
+        try:
+            _log_info(f"Generating distance distribution plot for {signal_type}...")
+            print(f"  Distance distribution for {signal_type}...", end=" ", flush=True)
+            compute_distance_distribution(
+                str(labels_path),
+                str(pairwise_file),
+                str(dist_output_plot),
+                signal_type,
+                str(anon_map_path) if anon_map_path.exists() else None
+            )
+            print(f"✓")
+            _log_info(f"Saved plot: {dist_output_plot}")
+            print(f"    → {dist_output_plot.name}")
+        except Exception as e:
+            print(f"✗ {e}")
+            _log_error(f"Failed to generate distance distribution for {signal_type}: {e}")
 
 def run_all_tests():
     setup_logging("test")
@@ -505,13 +606,20 @@ def run_all_tests():
     _log_info("[STARTUP] Creating fresh database for test run...")
     print("Running tests...")
     
+    from metrics.common import validate_series_metadata_exists
+    try:
+        validate_series_metadata_exists()
+    except ValueError as e:
+        print(f"✗ {e}")
+        raise
+    
     # Generate timestamp for this test run and pass to subprocesses
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     os.environ["TEST_RUN_TIMESTAMP"] = timestamp
     _log_info(f"Test run timestamp: {timestamp}")
     
     evaluator = Evaluator()
-    evaluator.cleanup_test_environment(signal_type="clip")
+    evaluator.cleanup_test_environment()
     
     # Setup bank and upload images for tests that need index (topk, threshold)
     BANK_NAME = os.getenv("BANK_NAME", "TEST_BANK_DATA")
@@ -521,13 +629,15 @@ def run_all_tests():
         return
     
     files_to_send = [str(file) for file in image_input_dir.iterdir() if file.is_file()]
-    index_size_before = evaluator.get_index_size("clip")
-    _log_info(f"Starting index size: {index_size_before}")
     print(f"Uploading {len(files_to_send)} images to bank...")
     evaluator.upload_files_to_bank(files_to_send, BANK_NAME)
-    expected_size = index_size_before + len(files_to_send)
-    evaluator.wait_for_index_update(expected_size, "clip")
-    _log_info(f"Index updated. Current size: {evaluator.get_index_size('clip')}")
+    
+    # Wait for both indexes to update
+    for signal_type in SIGNAL_TYPES:
+        index_size_before = evaluator.get_index_size(signal_type)
+        expected_size = index_size_before + len(files_to_send)
+        evaluator.wait_for_index_update(expected_size, signal_type)
+        _log_info(f"{signal_type} index updated. Current size: {evaluator.get_index_size(signal_type)}")
     
     test_dir = os.path.join(os.path.dirname(__file__), "tests")
     test_files = [f for f in os.listdir(test_dir) if f.endswith("_test.py")]
@@ -537,36 +647,47 @@ def run_all_tests():
     import sys
     sys.stdout.flush()
     
-    for i, fname in enumerate(test_files, 1):
-        print(f"[{i}/{len(test_files)}] {fname}")
-        _log_info(f"Running {fname} ...")
+    for signal_type in SIGNAL_TYPES:
+        _log_info(f"Running tests with signal_type={signal_type}")
+        os.environ["SIGNAL_TYPE"] = signal_type
         
-        # Import and run test directly (no subprocess - much simpler!)
-        test_name = fname.replace("_test.py", "").replace("_", " ").title()
-        print(f"  {test_name}: ", end="", flush=True)
-        
-        try:
-            # Import the test module directly
-            module_name = fname.replace(".py", "")
-            test_module = __import__(f"tests.{module_name}", fromlist=[module_name])
+        for i, fname in enumerate(test_files, 1):
+            print(f"[{i}/{len(test_files)}] {fname} ({signal_type})")
+            _log_info(f"Running {fname} ...")
             
-            # Run the test's main function directly
-            if hasattr(test_module, 'main'):
-                test_module.main()
-                print()  # Newline after test completes
-                _log_info(f"Test {fname} completed successfully")
-            else:
-                _log_error(f"Test {fname} has no main() function")
-                raise ValueError(f"Test {fname} has no main() function")
+            # Import and run test directly (no subprocess - much simpler!)
+            test_name = fname.replace("_test.py", "").replace("_", " ").title()
+            print(f"  {test_name}: ", end="", flush=True)
+            
+            try:
+                # Import the test module directly
+                module_name = fname.replace(".py", "")
+                test_module = __import__(f"tests.{module_name}", fromlist=[module_name])
                 
-        except Exception as e:
-            print()  # Newline on error
-            _log_error(f"Test {fname} failed: {e}")
-            import traceback
-            _log_error(traceback.format_exc())
-            raise
+                # Run the test's main function directly
+                if hasattr(test_module, 'main'):
+                    test_module.main()
+                    print()  # Newline after test completes
+                    _log_info(f"Test {fname} completed successfully")
+                else:
+                    _log_error(f"Test {fname} has no main() function")
+                    raise ValueError(f"Test {fname} has no main() function")
+                    
+            except Exception as e:
+                print()  # Newline on error
+                _log_error(f"Test {fname} failed: {e}")
+                import traceback
+                _log_error(traceback.format_exc())
+                raise
     
     print(f"✓ All tests completed. Logs: {log_file}")
+    
+    # Calculate MAP metrics
+    print("\nCalculating MAP metrics...")
+    _log_info("Calculating MAP metrics...")
+    output_root = Path(os.getenv("OUTPUT_DIR", "./results"))
+    results_dir = output_root / "evaluation_results" / timestamp
+    calculate_metrics(results_dir)
 
 def main():
     eval_mode = os.environ.get("EVAL_MODE", "smoke")
@@ -575,22 +696,25 @@ def main():
     
     if eval_mode == "smoke":
         _log_info("[STARTUP] Creating fresh database for smoke test...")
-        print("Running smoke test...")
+        print(f"Running smoke test...")
         evaluator = Evaluator()
-        evaluator.cleanup_test_environment(signal_type="clip")
+        evaluator.cleanup_test_environment()
         
         BANK_NAME = os.getenv("BANK_NAME", "TEST_BANK_DATA")
         if not evaluator.setup_bank(BANK_NAME):
             return
 
         files_to_send = [str(file) for file in image_input_dir.iterdir() if file.is_file()]
-        index_size_before = evaluator.get_index_size("clip")
-        _log_info(f"Starting index size: {index_size_before}")
         print(f"Uploading {len(files_to_send)} files...")
         evaluator.upload_files_to_bank(files_to_send, BANK_NAME)
-        expected_size = index_size_before + len(files_to_send)
-        evaluator.wait_for_index_update(expected_size, "clip")
-        evaluator.match_uploaded_files(files_to_send)
+        
+        for signal_type in SIGNAL_TYPES:
+            _log_info(f"Testing signal_type={signal_type}")
+            index_size_before = evaluator.get_index_size(signal_type)
+            expected_size = index_size_before + len(files_to_send)
+            evaluator.wait_for_index_update(expected_size, signal_type)
+            evaluator.match_uploaded_files(files_to_send, signal_type)
+        
         print(f"✓ Smoke test completed. Logs: {log_file}")
     else:
         run_all_tests()

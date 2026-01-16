@@ -54,5 +54,5 @@ COPY --from=builder /threatexchange/hasher-matcher-actioner/reference_omm_config
 COPY omm_config.py /reference_configs/development_omm_config.py
 
 EXPOSE 5100
-CMD ["gunicorn", "--bind", "0.0.0.0:5100", "--timeout", "300", "--workers", "1", "OpenMediaMatch.app:create_app()"]
+CMD ["gunicorn", "--bind", "0.0.0.0:5100", "--timeout", "1200", "--workers", "1", "OpenMediaMatch.app:create_app()"]
 

@@ -23,21 +23,23 @@ docker network create shared-hma-network
 docker compose up --build -d
 ```
 
-This builds HMA from ThreatExchange at commit `aff3f3b8` and starts:
+This builds HMA from ThreatExchange at a configured commit and starts:
 - PostgreSQL database for HMA
 - Database migrations
 - HMA application (port 5005 on host, 5100 internally)
 - Evaluation service
 
+To change the ThreatExchange commit: set build-time `THREATEXCHANGE_COMMIT` (in `docker-compose.yaml` or via `THREATEXCHANGE_COMMIT=... docker compose up --build -d`).
+
 ### 3. Run Tests
 
-**Smoke test (uses clip_float by default):**
+**Smoke test (iterates through all available signals by default):**
 ```bash
 docker compose run --rm -e BANK_NAME=SMOKE_TEST evaluation
 ```
 The smoke test cleans the database, creates a bank, uploads all images from `resources/images/`, and tests matching.
 
-**All tests (uses clip_float by default):**
+**All tests (iterates through all available signals by default):**
 ```bash
 docker compose run --rm -e EVAL_MODE=test evaluation
 ```
@@ -183,7 +185,7 @@ All test runs create detailed logs in `OUTPUT_DIR/test_run_logs/` (default `./re
 ## HMA Configuration
 
 - **Repository**: https://github.com/facebook/ThreatExchange
-- **Commit**: `aff3f3b8` (locked for reproducibility)
+- **Commit**: build-time `THREATEXCHANGE_COMMIT` (default in `Dockerfile.hma`, override in `docker-compose.yaml`).
 - **Port**: 5005 (host) → 5100 (container)
 - **Network**: `shared-hma-network`
 - **Config**: `omm_config.py` (includes CLIP extension)
@@ -194,7 +196,11 @@ All test runs create detailed logs in `OUTPUT_DIR/test_run_logs/` (default `./re
 - `EVAL_MODE`: `smoke` (default) or `test`
 - `BANK_NAME`: Bank name for testing (default: `TEST_BANK_DATA`)
 - `SIGNAL_TYPE`: Signal type for matching (optional)
+<<<<<<< HEAD
   - If **not set**: Tests `clip`, `clip_float`, and `cliphnsw` (default behavior)
+=======
+  - If **not set**: Iterates through all available signals (default behavior; currently `clip` and `clip_float`)
+>>>>>>> main
   - If **set**: Tests only the specified signal type (e.g., `SIGNAL_TYPE=clip`)
   - `clip_float`: Float-based distance/thresholds (0.0-1.0 range)
   - `clip`: Integer-based distance/thresholds (0-100 range)

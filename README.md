@@ -23,11 +23,13 @@ docker network create shared-hma-network
 docker compose up --build -d
 ```
 
-This builds HMA from ThreatExchange at commit `aff3f3b8` and starts:
+This builds HMA from ThreatExchange at a configured commit and starts:
 - PostgreSQL database for HMA
 - Database migrations
 - HMA application (port 5005 on host, 5100 internally)
 - Evaluation service
+
+To change the ThreatExchange commit: set build-time `THREATEXCHANGE_COMMIT` (in `docker-compose.yaml` or via `THREATEXCHANGE_COMMIT=... docker compose up --build -d`).
 
 ### 3. Run Tests
 
@@ -183,7 +185,7 @@ All test runs create detailed logs in `OUTPUT_DIR/test_run_logs/` (default `./re
 ## HMA Configuration
 
 - **Repository**: https://github.com/facebook/ThreatExchange
-- **Commit**: `aff3f3b8` (locked for reproducibility)
+- **Commit**: build-time `THREATEXCHANGE_COMMIT` (default in `Dockerfile.hma`, override in `docker-compose.yaml`).
 - **Port**: 5005 (host) → 5100 (container)
 - **Network**: `shared-hma-network`
 - **Config**: `omm_config.py` (includes CLIP extension)

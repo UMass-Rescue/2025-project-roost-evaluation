@@ -167,6 +167,14 @@ The series metadata is used to:
 - Determine ground truth for precision/recall calculations
 - Separate distance distributions into same-series vs different-series pairs
 
+### Labels Creation
+
+If your image input directory contains series subfolders, the evaluation will
+auto-generate `resources/labels/images_series_labels.json` on each run.
+For flat directories, create or update `resources/labels/images_series_labels.json`
+manually (or set `LABELS_PATH` to an existing labels file).
+The image-series dataset lives at `resources/images/image-series-dataset/series`.
+
 ## Test Logs
 
 All test runs create detailed logs in `OUTPUT_DIR/test_run_logs/` (default `./results/test_run_logs`):

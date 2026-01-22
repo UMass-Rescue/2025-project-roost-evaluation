@@ -4,7 +4,7 @@ import binascii
 import numpy as np
 from pathlib import Path
 from datetime import datetime
-from evaluate import image_input_dir
+from series_labels_utils import get_image_files as _get_image_files
 from tests.path_id_store import PathIdStore
 
 ANON_ENV_FLAG = "DEANONYMIZE_IMAGE_PATHS"
@@ -12,8 +12,10 @@ ANON_ENV_FLAG = "DEANONYMIZE_IMAGE_PATHS"
 def get_image_files(image_dir=None):
     """Return sorted list of image file paths from the given directory (default: resources/images or $IMAGE_INPUT_DIR)."""
     if image_dir is None:
-        image_dir = os.environ.get("IMAGE_INPUT_DIR", str(image_input_dir))
-    return sorted([str(f) for f in Path(image_dir).iterdir() if f.is_file()])
+        image_dir = Path(os.environ.get("IMAGE_INPUT_DIR", "./resources/images"))
+    else:
+        image_dir = Path(image_dir)
+    return _get_image_files(image_dir)
 
 def hash_image(evaluator, image_path):
     """Return the hash dict for a given image file using the Evaluator."""

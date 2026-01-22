@@ -5,6 +5,7 @@ import json
 import time
 from pathlib import Path
 import logging
+from series_labels_utils import get_image_files, ensure_labels_file
 from datetime import datetime
 
 # Try to import psycopg2 for database access (optional)
@@ -22,6 +23,8 @@ hash_url = hma_app_url +  "/h/hash"
 match_url = hma_app_url + "/m/lookup"
 match_url_topk = hma_app_url + "/m/lookup_topk"
 match_url_threshold = hma_app_url + "/m/lookup_threshold"
+
+LABELS_PATH_ENV = "LABELS_PATH"
 
 # Signal types to test
 # Can be overridden via SIGNAL_TYPE env var (e.g., SIGNAL_TYPE=clip)
@@ -517,7 +520,9 @@ def calculate_metrics(results_dir):
     from metrics.distance_distribution import compute_distance_distribution
     from metrics.common import validate_series_metadata_exists
     
-    labels_path = Path("resources/labels/images_series_labels.json")
+    labels_path = Path(os.getenv(LABELS_PATH_ENV, "resources/labels/images_series_labels.json"))
+    image_dir = Path(os.environ.get("IMAGE_INPUT_DIR", str(image_input_dir)))
+    labels_path = ensure_labels_file(labels_path, image_dir)
     
     try:
         validate_series_metadata_exists(str(labels_path))
@@ -607,8 +612,11 @@ def run_all_tests():
     print("Running tests...")
     
     from metrics.common import validate_series_metadata_exists
+    labels_path = Path(os.getenv(LABELS_PATH_ENV, "resources/labels/images_series_labels.json"))
+    image_dir = Path(os.environ.get("IMAGE_INPUT_DIR", str(image_input_dir)))
+    labels_path = ensure_labels_file(labels_path, image_dir)
     try:
-        validate_series_metadata_exists()
+        validate_series_metadata_exists(str(labels_path))
     except ValueError as e:
         print(f"✗ {e}")
         raise
@@ -628,7 +636,7 @@ def run_all_tests():
         _log_error("Failed to setup bank. Exiting.")
         return
     
-    files_to_send = [str(file) for file in image_input_dir.iterdir() if file.is_file()]
+    files_to_send = get_image_files()
     print(f"Uploading {len(files_to_send)} images to bank...")
     evaluator.upload_files_to_bank(files_to_send, BANK_NAME)
     
@@ -704,7 +712,7 @@ def main():
         if not evaluator.setup_bank(BANK_NAME):
             return
 
-        files_to_send = [str(file) for file in image_input_dir.iterdir() if file.is_file()]
+        files_to_send = get_image_files()
         print(f"Uploading {len(files_to_send)} files...")
         evaluator.upload_files_to_bank(files_to_send, BANK_NAME)
         

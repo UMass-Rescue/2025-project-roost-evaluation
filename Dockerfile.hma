@@ -25,6 +25,9 @@ RUN git clone https://github.com/facebook/ThreatExchange.git . && \
 # Build stage - build HMA from the cloned source
 FROM python:3.13-bullseye
 
+# Ensure Python logs are sent to stdout/stderr immediately without buffering
+ENV PYTHONUNBUFFERED=1
+
 WORKDIR /app
 
 # Install system dependencies for CLIP (torch, etc.)
@@ -42,7 +45,7 @@ COPY --from=builder /threatexchange/hasher-matcher-actioner/src /app
 COPY --from=builder /threatexchange/hasher-matcher-actioner/scripts/ /app/scripts
 
 # Install CLIP extension (after HMA is installed and source is available)
-RUN git clone -b main https://github.com/UMass-Rescue/tx-extension-clip.git /app/tx-extension-clip && \
+RUN git clone -b simplified-HNSW https://github.com/UMass-Rescue/tx-extension-clip.git /app/tx-extension-clip && \
     pip install -e /app/tx-extension-clip && \
     python -c "from tx_extension_clip import CLIPSignal, CLIPFloatSignal; print('✓ CLIP extension installed and verified')" || \
     (echo "ERROR: CLIP extension installation or import failed" && exit 1)
@@ -54,5 +57,5 @@ COPY --from=builder /threatexchange/hasher-matcher-actioner/reference_omm_config
 COPY omm_config.py /reference_configs/development_omm_config.py
 
 EXPOSE 5100
-CMD ["gunicorn", "--bind", "0.0.0.0:5100", "--timeout", "1200", "--workers", "1", "OpenMediaMatch.app:create_app()"]
+CMD ["gunicorn", "--bind", "0.0.0.0:5100", "--timeout", "1200", "--workers", "1", "--error-logfile", "-", "--capture-output", "--log-level", "info", "OpenMediaMatch.app:create_app()"]
 

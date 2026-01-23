@@ -190,6 +190,33 @@ All test runs create detailed logs in `OUTPUT_DIR/test_run_logs/` (default `./re
 - **Network**: `shared-hma-network`
 - **Config**: `omm_config.py` (includes CLIP extension)
 
+### CLIP Index Configuration
+
+The CLIP extension supports two index types for `clip_float`:
+- **HNSW (Approximate)**: Fast approximate nearest neighbor search (default)
+- **Flat (Exact)**: Exact search using brute-force comparison
+
+To disable HNSW and use exact/flat search, add to the `hma-app` service in `docker-compose.yaml`:
+```yaml
+hma-app:
+  environment:
+    <<: *omm-variables
+    CLIP_DISABLE_HNSW_INDEX: 'true'
+```
+
+**Check which index type is being used** (logs appear when index is loaded at runtime):
+```bash
+# After running tests - check signal-level wrapper
+docker compose logs hma-app 2>&1 | grep "CLIP_SIGNAL_INDEX_TYPE" | head -1
+# Example output: CLIPHNSWIndex (approximate/hnsw search wrapper, M=32, ef_construction=200, ef_search=128)
+
+# Or check matcher-level FAISS index
+docker compose logs hma-app 2>&1 | grep "CLIP_MATCHER_INDEX_TYPE" | head -1
+# Example output: CLIPHNSWVectorIndex (approximate/hnsw search, M=32, ef_construction=200, ef_search=128)
+```
+
+With `CLIP_DISABLE_HNSW_INDEX: 'true'` you'll see `CLIPFloatIndex (exact/flat)` or `CLIPFloatVectorIndex (exact/flat)` instead.
+
 ## Environment Variables
 
 ### Test Configuration

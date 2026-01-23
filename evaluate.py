@@ -183,7 +183,7 @@ class Evaluator:
 
     def match_local_content(self, file_path: str, signal_type: str) -> dict:
         hasher_resp = self.hash_local_content(file_path)
-        # signal_type can be 'clip', 'clip_float', or 'cliphnsw'
+        # signal_type defaults to 'clip_float'
         
         # Check if hash was successful and contains the signal type
         if not isinstance(hasher_resp, dict) or signal_type not in hasher_resp:
@@ -225,7 +225,7 @@ class Evaluator:
 
     def match_local_content_topk(self, file_path: str, k: int, signal_type: str) -> dict:
         hasher_resp = self.hash_local_content(file_path)
-        # signal_type can be 'clip', 'clip_float', or 'cliphnsw'
+        # signal_type defaults to 'clip_float'
         
         # Check if hash was successful and contains the signal type
         if not isinstance(hasher_resp, dict) or signal_type not in hasher_resp:
@@ -266,7 +266,7 @@ class Evaluator:
 
     def match_local_content_threshold(self, file_path: str, threshold: int | float, signal_type: str) -> dict:
         hasher_resp = self.hash_local_content(file_path)
-        # signal_type can be 'clip' (int thresholds) or 'clip_float'/'cliphnsw' (float thresholds)
+        # signal_type defaults to 'clip_float' (float thresholds)
         
         # Check if hash was successful and contains the signal type
         if not isinstance(hasher_resp, dict) or signal_type not in hasher_resp:

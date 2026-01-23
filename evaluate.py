@@ -23,13 +23,9 @@ match_url = hma_app_url + "/m/lookup"
 match_url_topk = hma_app_url + "/m/lookup_topk"
 match_url_threshold = hma_app_url + "/m/lookup_threshold"
 
-# Signal types to test
-# Can be overridden via SIGNAL_TYPE env var (e.g., SIGNAL_TYPE=clip)
-_signal_type_env = os.getenv("SIGNAL_TYPE", "").strip()
-if _signal_type_env:
-    SIGNAL_TYPES = [_signal_type_env]
-else:
-    SIGNAL_TYPES = ["clip", "clip_float", "cliphnsw"]
+# Signal type to use - defaults to clip_float
+# Can be overridden via SIGNAL_TYPE env var
+SIGNAL_TYPE = os.getenv("SIGNAL_TYPE", "clip_float")
 
 # Setup logging
 logger = None
@@ -489,7 +485,7 @@ class Evaluator:
         """
         Clean up test environment by clearing all database data.
         This ensures complete isolation - no leftover indexes or data from previous runs.
-        Verifies all signal types are empty.
+        Verifies the signal type index is empty.
         """
         _log_info("Cleaning up test environment...")
         
@@ -497,20 +493,19 @@ class Evaluator:
             # Wait for HMA to process the changes
             time.sleep(2)
             
-            # Verify all indexes are empty
-            for signal_type in SIGNAL_TYPES:
-                index_size = self.get_index_size(signal_type)
-                if index_size == 0:
-                    _log_info(f"✓ {signal_type} index is empty")
-                else:
-                    _log_warning(f"{signal_type} index size is {index_size}, expected 0")
+            # Verify index is empty
+            index_size = self.get_index_size(SIGNAL_TYPE)
+            if index_size == 0:
+                _log_info(f"✓ {SIGNAL_TYPE} index is empty")
+            else:
+                _log_warning(f"{SIGNAL_TYPE} index size is {index_size}, expected 0")
             return True
         else:
             _log_error("Failed to clear database")
             return False
 
 def calculate_metrics(results_dir):
-    """Calculate MAP, classification PR, and distance plots for all signal types."""
+    """Calculate MAP, classification PR, and distance plots."""
     # Import here to avoid circular dependency
     from metrics.map import compute_map_from_pairwise
     from metrics.precision_recall import compute_precision_recall_from_pairwise
@@ -533,72 +528,71 @@ def calculate_metrics(results_dir):
         output_root = Path(os.getenv("OUTPUT_DIR", "./results"))
         anon_map_path = output_root / "file_to_id_map" / "anon_id_map.json"
     
-    for signal_type in SIGNAL_TYPES:
-        pairwise_file = results_dir / f"pairwise_{signal_type}_compare.json"
-        
-        if not pairwise_file.exists():
-            _log_warning(f"Pairwise results not found: {pairwise_file}")
-            continue
-        
-        # Compute MAP
-        map_output_csv = results_dir / f"map_by_series_{signal_type}_results.csv"
-        try:
-            _log_info(f"Computing MAP metric for {signal_type}...")
-            print(f"  MAP@k for {signal_type}...", end=" ", flush=True)
-            compute_map_from_pairwise(
-                str(labels_path),
-                str(pairwise_file),
-                str(map_output_csv),
-                str(anon_map_path) if anon_map_path.exists() else None
-            )
-            print(f"✓")
-            _log_info(f"Saved to: {map_output_csv}")
-            print(f"    → {map_output_csv.name}")
-        except Exception as e:
-            print(f"✗ {e}")
-            _log_error(f"Failed to compute MAP for {signal_type}: {e}")
-        
-        # Compute classification Precision-Recall (threshold sweep)
-        pr_csv = results_dir / f"precision_recall_{signal_type}_results.csv"
-        pr_plot = results_dir / f"precision_recall_{signal_type}_curve.png"
-        try:
-            _log_info(f"Computing classification Precision-Recall for {signal_type}...")
-            print(f"  Classification PR for {signal_type}...", end=" ", flush=True)
-            compute_precision_recall_from_pairwise(
-                str(labels_path),
-                str(pairwise_file),
-                str(pr_csv),
-                str(pr_plot),
-                str(anon_map_path) if anon_map_path.exists() else None,
-                signal_type,
-            )
-            print(f"✓")
-            _log_info(f"Saved CSV: {pr_csv}")
-            _log_info(f"Saved plot: {pr_plot}")
-            print(f"    → {pr_csv.name}")
-            print(f"    → {pr_plot.name}")
-        except Exception as e:
-            print(f"✗ {e}")
-            _log_error(f"Failed to compute classification PR for {signal_type}: {e}")
-        
-        # Generate distance distribution histograms
-        dist_output_plot = results_dir / f"distance_distribution_{signal_type}.png"
-        try:
-            _log_info(f"Generating distance distribution plot for {signal_type}...")
-            print(f"  Distance distribution for {signal_type}...", end=" ", flush=True)
-            compute_distance_distribution(
-                str(labels_path),
-                str(pairwise_file),
-                str(dist_output_plot),
-                signal_type,
-                str(anon_map_path) if anon_map_path.exists() else None
-            )
-            print(f"✓")
-            _log_info(f"Saved plot: {dist_output_plot}")
-            print(f"    → {dist_output_plot.name}")
-        except Exception as e:
-            print(f"✗ {e}")
-            _log_error(f"Failed to generate distance distribution for {signal_type}: {e}")
+    pairwise_file = results_dir / f"pairwise_{SIGNAL_TYPE}_compare.json"
+    
+    if not pairwise_file.exists():
+        _log_warning(f"Pairwise results not found: {pairwise_file}")
+        return
+    
+    # Compute MAP
+    map_output_csv = results_dir / f"map_by_series_{SIGNAL_TYPE}_results.csv"
+    try:
+        _log_info(f"Computing MAP metric for {SIGNAL_TYPE}...")
+        print(f"  MAP@k for {SIGNAL_TYPE}...", end=" ", flush=True)
+        compute_map_from_pairwise(
+            str(labels_path),
+            str(pairwise_file),
+            str(map_output_csv),
+            str(anon_map_path) if anon_map_path.exists() else None
+        )
+        print(f"✓")
+        _log_info(f"Saved to: {map_output_csv}")
+        print(f"    → {map_output_csv.name}")
+    except Exception as e:
+        print(f"✗ {e}")
+        _log_error(f"Failed to compute MAP for {SIGNAL_TYPE}: {e}")
+    
+    # Compute classification Precision-Recall (threshold sweep)
+    pr_csv = results_dir / f"precision_recall_{SIGNAL_TYPE}_results.csv"
+    pr_plot = results_dir / f"precision_recall_{SIGNAL_TYPE}_curve.png"
+    try:
+        _log_info(f"Computing classification Precision-Recall for {SIGNAL_TYPE}...")
+        print(f"  Classification PR for {SIGNAL_TYPE}...", end=" ", flush=True)
+        compute_precision_recall_from_pairwise(
+            str(labels_path),
+            str(pairwise_file),
+            str(pr_csv),
+            str(pr_plot),
+            str(anon_map_path) if anon_map_path.exists() else None,
+            SIGNAL_TYPE,
+        )
+        print(f"✓")
+        _log_info(f"Saved CSV: {pr_csv}")
+        _log_info(f"Saved plot: {pr_plot}")
+        print(f"    → {pr_csv.name}")
+        print(f"    → {pr_plot.name}")
+    except Exception as e:
+        print(f"✗ {e}")
+        _log_error(f"Failed to compute classification PR for {SIGNAL_TYPE}: {e}")
+    
+    # Generate distance distribution histograms
+    dist_output_plot = results_dir / f"distance_distribution_{SIGNAL_TYPE}.png"
+    try:
+        _log_info(f"Generating distance distribution plot for {SIGNAL_TYPE}...")
+        print(f"  Distance distribution for {SIGNAL_TYPE}...", end=" ", flush=True)
+        compute_distance_distribution(
+            str(labels_path),
+            str(pairwise_file),
+            str(dist_output_plot),
+            SIGNAL_TYPE,
+            str(anon_map_path) if anon_map_path.exists() else None
+        )
+        print(f"✓")
+        _log_info(f"Saved plot: {dist_output_plot}")
+        print(f"    → {dist_output_plot.name}")
+    except Exception as e:
+        print(f"✗ {e}")
+        _log_error(f"Failed to generate distance distribution for {SIGNAL_TYPE}: {e}")
 
 def run_all_tests():
     setup_logging("test")
@@ -632,12 +626,11 @@ def run_all_tests():
     print(f"Uploading {len(files_to_send)} images to bank...")
     evaluator.upload_files_to_bank(files_to_send, BANK_NAME)
     
-    # Wait for both indexes to update
-    for signal_type in SIGNAL_TYPES:
-        index_size_before = evaluator.get_index_size(signal_type)
-        expected_size = index_size_before + len(files_to_send)
-        evaluator.wait_for_index_update(expected_size, signal_type)
-        _log_info(f"{signal_type} index updated. Current size: {evaluator.get_index_size(signal_type)}")
+    # Wait for index to update
+    index_size_before = evaluator.get_index_size(SIGNAL_TYPE)
+    expected_size = index_size_before + len(files_to_send)
+    evaluator.wait_for_index_update(expected_size, SIGNAL_TYPE)
+    _log_info(f"{SIGNAL_TYPE} index updated. Current size: {evaluator.get_index_size(SIGNAL_TYPE)}")
     
     test_dir = os.path.join(os.path.dirname(__file__), "tests")
     test_files = [f for f in os.listdir(test_dir) if f.endswith("_test.py")]
@@ -647,38 +640,37 @@ def run_all_tests():
     import sys
     sys.stdout.flush()
     
-    for signal_type in SIGNAL_TYPES:
-        _log_info(f"Running tests with signal_type={signal_type}")
-        os.environ["SIGNAL_TYPE"] = signal_type
+    _log_info(f"Running tests with signal_type={SIGNAL_TYPE}")
+    os.environ["SIGNAL_TYPE"] = SIGNAL_TYPE
+    
+    for i, fname in enumerate(test_files, 1):
+        print(f"[{i}/{len(test_files)}] {fname} ({SIGNAL_TYPE})")
+        _log_info(f"Running {fname} ...")
         
-        for i, fname in enumerate(test_files, 1):
-            print(f"[{i}/{len(test_files)}] {fname} ({signal_type})")
-            _log_info(f"Running {fname} ...")
+        # Import and run test directly (no subprocess - much simpler!)
+        test_name = fname.replace("_test.py", "").replace("_", " ").title()
+        print(f"  {test_name}: ", end="", flush=True)
+        
+        try:
+            # Import the test module directly
+            module_name = fname.replace(".py", "")
+            test_module = __import__(f"tests.{module_name}", fromlist=[module_name])
             
-            # Import and run test directly (no subprocess - much simpler!)
-            test_name = fname.replace("_test.py", "").replace("_", " ").title()
-            print(f"  {test_name}: ", end="", flush=True)
-            
-            try:
-                # Import the test module directly
-                module_name = fname.replace(".py", "")
-                test_module = __import__(f"tests.{module_name}", fromlist=[module_name])
+            # Run the test's main function directly
+            if hasattr(test_module, 'main'):
+                test_module.main()
+                print()  # Newline after test completes
+                _log_info(f"Test {fname} completed successfully")
+            else:
+                _log_error(f"Test {fname} has no main() function")
+                raise ValueError(f"Test {fname} has no main() function")
                 
-                # Run the test's main function directly
-                if hasattr(test_module, 'main'):
-                    test_module.main()
-                    print()  # Newline after test completes
-                    _log_info(f"Test {fname} completed successfully")
-                else:
-                    _log_error(f"Test {fname} has no main() function")
-                    raise ValueError(f"Test {fname} has no main() function")
-                    
-            except Exception as e:
-                print()  # Newline on error
-                _log_error(f"Test {fname} failed: {e}")
-                import traceback
-                _log_error(traceback.format_exc())
-                raise
+        except Exception as e:
+            print()  # Newline on error
+            _log_error(f"Test {fname} failed: {e}")
+            import traceback
+            _log_error(traceback.format_exc())
+            raise
     
     print(f"✓ All tests completed. Logs: {log_file}")
     
@@ -708,12 +700,11 @@ def main():
         print(f"Uploading {len(files_to_send)} files...")
         evaluator.upload_files_to_bank(files_to_send, BANK_NAME)
         
-        for signal_type in SIGNAL_TYPES:
-            _log_info(f"Testing signal_type={signal_type}")
-            index_size_before = evaluator.get_index_size(signal_type)
-            expected_size = index_size_before + len(files_to_send)
-            evaluator.wait_for_index_update(expected_size, signal_type)
-            evaluator.match_uploaded_files(files_to_send, signal_type)
+        _log_info(f"Testing signal_type={SIGNAL_TYPE}")
+        index_size_before = evaluator.get_index_size(SIGNAL_TYPE)
+        expected_size = index_size_before + len(files_to_send)
+        evaluator.wait_for_index_update(expected_size, SIGNAL_TYPE)
+        evaluator.match_uploaded_files(files_to_send, SIGNAL_TYPE)
         
         print(f"✓ Smoke test completed. Logs: {log_file}")
     else:

@@ -23,12 +23,10 @@ from threatexchange.exchanges.impl.fb_threatexchange_api import (
 )
 
 # Import CLIP signal types from the extension
-try:
-    from tx_extension_clip import CLIPSignal, CLIPFloatSignal, CLIPHNSWSignal
-    CLIP_ENABLED = True
-except ImportError:
-    CLIP_ENABLED = False
-    logging.warning("CLIP extension not available. CLIP signals will not be enabled.")
+from tx_extension_clip import CLIPFloatSignal
+
+# CLIP is always enabled - using clip_float as the only signal
+CLIP_ENABLED = True
 
 # Database configuration
 DBUSER = "postgres"
@@ -50,12 +48,8 @@ TASK_INDEXER = True
 TASK_INDEX_CACHE = True
 
 # Core functionality configuration
-# Include CLIP signals if available
-signal_types = [PdqSignal, VideoMD5Signal]
-if CLIP_ENABLED:
-    signal_types.append(CLIPSignal)
-    signal_types.append(CLIPFloatSignal)
-    signal_types.append(CLIPHNSWSignal)
+# Using only CLIPFloatSignal for semantic image matching
+signal_types = [CLIPFloatSignal]
 
 STORAGE_IFACE_INSTANCE = DefaultOMMStore(
     signal_types=signal_types,

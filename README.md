@@ -190,6 +190,20 @@ All test runs create detailed logs in `OUTPUT_DIR/test_run_logs/` (default `./re
 - **Network**: `shared-hma-network`
 - **Config**: `omm_config.py` (includes CLIP extension)
 
+### Signal Types Configuration
+
+Signal types are configured in `omm_config.py`. This evaluation uses **CLIPFloatSignal** by default.
+
+**Available signals:**
+- **HMA built-in:**
+  - `PdqSignal`: Meta's perceptual hash for images (0-256 range)
+  - `VideoMD5Signal`: MD5 hash for exact video matching
+- **CLIP extension:**
+  - `CLIPSignal`: Integer-based CLIP embeddings (0-100 range)
+  - `CLIPFloatSignal`: Float-based CLIP embeddings (0.0-1.0 range) - **default**
+
+To enable additional signals, edit `omm_config.py` and uncomment the desired signal types in the `signal_types` list.
+
 ### CLIP Index Configuration
 
 The CLIP extension supports two index types for `clip_float`:

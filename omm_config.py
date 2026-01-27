@@ -22,11 +22,19 @@ from threatexchange.exchanges.impl.fb_threatexchange_api import (
     FBThreatExchangeSignalExchangeAPI,
 )
 
-# Import CLIP signal types from the extension
-from tx_extension_clip import CLIPFloatSignal
+# Signal Types Configuration
+# Available signals:
+#   HMA built-in: PdqSignal (perceptual hash), VideoMD5Signal (exact video match)
+#   CLIP extension: CLIPSignal (int, 0-100), CLIPFloatSignal (float, 0.0-1.0)
+# This evaluation uses CLIPFloatSignal by default. See README for more details.
 
-# CLIP is always enabled - using clip_float as the only signal
-CLIP_ENABLED = True
+# Import CLIP signal types from the extension
+try:
+    from tx_extension_clip import CLIPSignal, CLIPFloatSignal
+    CLIP_ENABLED = True
+except ImportError:
+    CLIP_ENABLED = False
+    logging.warning("CLIP extension not available. CLIP signals will not be enabled.")
 
 # Database configuration
 DBUSER = "postgres"
@@ -48,8 +56,14 @@ TASK_INDEXER = True
 TASK_INDEX_CACHE = True
 
 # Core functionality configuration
-# Using only CLIPFloatSignal for semantic image matching
-signal_types = [CLIPFloatSignal]
+# Using only CLIPFloatSignal for semantic image matching in this evaluation
+# To include other signals, uncomment the lines below:
+signal_types = []
+if CLIP_ENABLED:
+    signal_types.append(CLIPFloatSignal)  # DEFAULT: Float-based CLIP (0.0-1.0 distance)
+    # signal_types.append(CLIPSignal)     # Optional: Integer-based CLIP (0-100 distance)
+# signal_types.append(PdqSignal)          # Optional: Meta's perceptual image hash
+# signal_types.append(VideoMD5Signal)     # Optional: Video MD5 exact matching
 
 STORAGE_IFACE_INSTANCE = DefaultOMMStore(
     signal_types=signal_types,

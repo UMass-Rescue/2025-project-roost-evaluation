@@ -500,7 +500,7 @@ class Evaluator:
             # Wait for HMA to process the changes
             time.sleep(2)
             
-            # Verify all indexes are empty
+            # Verify indexes are empty for all signal types
             for signal_type in SIGNAL_TYPES:
                 index_size = self.get_index_size(signal_type)
                 if index_size == 0:
@@ -606,6 +606,7 @@ def calculate_metrics(results_dir):
             _log_error(f"Failed to generate distance distribution for {signal_type}: {e}")
 
 def run_all_tests():
+    start_time = time.time()
     setup_logging("test")
     global log_file  # Ensure we can access the log_file variable
     _log_info("[STARTUP] Creating fresh database for test run...")
@@ -636,31 +637,36 @@ def run_all_tests():
         _log_error("Failed to setup bank. Exiting.")
         return
     
-    files_to_send = get_image_files()
+    files_to_send = get_image_files(image_dir)
     print(f"Uploading {len(files_to_send)} images to bank...")
     evaluator.upload_files_to_bank(files_to_send, BANK_NAME)
     
-    # Wait for both indexes to update
+    # Run tests for each signal type
     for signal_type in SIGNAL_TYPES:
+        print(f"\n{'='*60}")
+        print(f"Testing signal type: {signal_type}")
+        print(f"{'='*60}")
+        _log_info(f"Testing signal type: {signal_type}")
+        
+        # Wait for index to update
         index_size_before = evaluator.get_index_size(signal_type)
         expected_size = index_size_before + len(files_to_send)
         evaluator.wait_for_index_update(expected_size, signal_type)
         _log_info(f"{signal_type} index updated. Current size: {evaluator.get_index_size(signal_type)}")
-    
-    test_dir = os.path.join(os.path.dirname(__file__), "tests")
-    test_files = [f for f in os.listdir(test_dir) if f.endswith("_test.py")]
-    _log_info(f"Found {len(test_files)} test files: {test_files}")
-    print(f"Found {len(test_files)} test files")
-    # Flush to ensure output is visible
-    import sys
-    sys.stdout.flush()
-    
-    for signal_type in SIGNAL_TYPES:
+        
+        test_dir = os.path.join(os.path.dirname(__file__), "tests")
+        test_files = [f for f in os.listdir(test_dir) if f.endswith("_test.py")]
+        _log_info(f"Found {len(test_files)} test files: {test_files}")
+        print(f"Found {len(test_files)} test files")
+        # Flush to ensure output is visible
+        import sys
+        sys.stdout.flush()
+        
         _log_info(f"Running tests with signal_type={signal_type}")
         os.environ["SIGNAL_TYPE"] = signal_type
         
         for i, fname in enumerate(test_files, 1):
-            print(f"[{i}/{len(test_files)}] {fname} ({signal_type})")
+            print(f"[{i}/{len(test_files)}] {fname}")
             _log_info(f"Running {fname} ...")
             
             # Import and run test directly (no subprocess - much simpler!)
@@ -696,6 +702,13 @@ def run_all_tests():
     output_root = Path(os.getenv("OUTPUT_DIR", "./results"))
     results_dir = output_root / "evaluation_results" / timestamp
     calculate_metrics(results_dir)
+    
+    # Print elapsed time
+    elapsed_time = time.time() - start_time
+    elapsed_minutes = int(elapsed_time // 60)
+    elapsed_seconds = int(elapsed_time % 60)
+    print(f"\n⏱  Total time elapsed: {elapsed_minutes}m {elapsed_seconds}s")
+    _log_info(f"Total time elapsed: {elapsed_minutes}m {elapsed_seconds}s ({elapsed_time:.2f}s)")
 
 def main():
     eval_mode = os.environ.get("EVAL_MODE", "smoke")
@@ -712,7 +725,8 @@ def main():
         if not evaluator.setup_bank(BANK_NAME):
             return
 
-        files_to_send = get_image_files()
+        image_dir = Path(os.environ.get("IMAGE_INPUT_DIR", str(image_input_dir)))
+        files_to_send = get_image_files(image_dir)
         print(f"Uploading {len(files_to_send)} files...")
         evaluator.upload_files_to_bank(files_to_send, BANK_NAME)
         

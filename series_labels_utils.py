@@ -57,13 +57,18 @@ def _build_labels_from_series_dirs(
 
 
 def ensure_labels_file(labels_path: Path, image_dir: Path) -> Path:
+    # Check if labels file already exists first
+    repo_root = Path(__file__).resolve().parent
+    default_labels_path = repo_root / "resources/labels" / DEFAULT_LABELS_FILENAME
+    
+    if default_labels_path.exists() or labels_path.exists():
+        return labels_path if labels_path.exists() else default_labels_path
+    
+    # Generate labels only if missing and series subfolders exist
     if _has_image_subdirs(image_dir):
-        repo_root = Path(__file__).resolve().parent
-        default_labels_path = repo_root / "resources/labels" / DEFAULT_LABELS_FILENAME
         _build_labels_from_series_dirs(image_dir, default_labels_path)
         return default_labels_path
-    if labels_path.exists():
-        return labels_path
+    
     raise ValueError(
         "Series labels file missing and input images appear flat. "
         "Provide LABELS_PATH or use a directory of series subfolders."

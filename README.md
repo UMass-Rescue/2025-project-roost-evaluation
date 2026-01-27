@@ -167,13 +167,13 @@ The series metadata is used to:
 - Determine ground truth for precision/recall calculations
 - Separate distance distributions into same-series vs different-series pairs
 
-### Labels Creation
+### Labels Creation (Optional)
 
-If your image input directory contains series subfolders, the evaluation will
-auto-generate `resources/labels/images_series_labels.json` on each run.
-For flat directories, create or update `resources/labels/images_series_labels.json`
-manually (or set `LABELS_PATH` to an existing labels file).
-The image-series dataset lives at `resources/images/image-series-dataset/series`.
+**Automatic generation:** If `resources/labels/images_series_labels.json` doesn't exist and your image directory has series subfolders (like `resources/images/image-series-dataset/series`), labels will be auto-generated once on the first test run.
+
+**Manual creation:** For flat image directories, you must manually create `resources/labels/images_series_labels.json` before running tests (or set `LABELS_PATH` to point to an existing labels file).
+
+The included `image-series-dataset` is located at `resources/images/image-series-dataset/series`.
 
 ## Test Logs
 
@@ -203,15 +203,11 @@ All test runs create detailed logs in `OUTPUT_DIR/test_run_logs/` (default `./re
 ### Test Configuration
 - `EVAL_MODE`: `smoke` (default) or `test`
 - `BANK_NAME`: Bank name for testing (default: `TEST_BANK_DATA`)
-- `SIGNAL_TYPE`: Signal type for matching (optional)
-  - If **not set**: Iterates through all available signals (default behavior; currently `clip`, `clip_float`, and `cliphnsw`)
-  - If **set**: Tests only the specified signal type (e.g., `SIGNAL_TYPE=clip`)
-  - `clip_float`: Float-based distance/thresholds (0.0-1.0 range)
-  - `clip`: Integer-based distance/thresholds (0-100 range)
-  - `cliphnsw`: Float-based distance/thresholds (0.0-1.0 range)
+- `SIGNAL_TYPE`: Signal type to test (default: tests `clip`, `clip_float`, `cliphnsw`). Set to a single value like `clip_float` to test only that signal type.
 - `MAX_K`: Maximum k for top-k test (default: `5`)
-- `THRESHOLD_MAX`: Maximum threshold value (default: `100` for clip, `1.0` for clip_float/cliphnsw)
-- `THRESHOLD_STEP`: Threshold step size (default: `20` for clip, `0.2` for clip_float/cliphnsw)
+- `THRESHOLD_MAX`: Maximum threshold value (default: `1.0` for clip_float)
+- `THRESHOLD_STEP`: Threshold step size (default: `0.2` for clip_float)
+- `MAX_WORKERS`: Number of parallel workers for test API calls (default: `8`). Controls parallelization of pairwise/threshold/topk tests. Higher values = faster tests but more load on HMA server.
 
 ### HMA Connection (auto-configured in docker-compose)
 - `HMA_HOST`: `hma-app` (internal container name)

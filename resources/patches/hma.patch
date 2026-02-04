@@ -11,7 +11,7 @@ index 00cff0e0..ae5d513f 100644
        - "hasher-matcher-actioner/**"
        - ".github/workflows/hma-ci.yaml"
 diff --git a/hasher-matcher-actioner/src/OpenMediaMatch/blueprints/matching.py b/hasher-matcher-actioner/src/OpenMediaMatch/blueprints/matching.py
-index 7d94e3ed..281f11b1 100644
+index 7d94e3ed..58a51c71 100644
 --- a/hasher-matcher-actioner/src/OpenMediaMatch/blueprints/matching.py
 +++ b/hasher-matcher-actioner/src/OpenMediaMatch/blueprints/matching.py
 @@ -27,6 +27,7 @@ from OpenMediaMatch.storage import interface
@@ -35,7 +35,7 @@ index 7d94e3ed..281f11b1 100644
  TMatchByBank = t.Mapping[str, t.Sequence[MatchWithDistance]]
  TBankMatchBySignalType = t.Mapping[str, TMatchByBank]
  
-@@ -152,6 +159,106 @@ def raw_lookup():
+@@ -152,6 +159,96 @@ def raw_lookup():
      return {"matches": lookup_signal_func(signal, signal_type_name, requested_banks)}
  
  
@@ -52,7 +52,7 @@ index 7d94e3ed..281f11b1 100644
 +     * Signal value (the hash)
 +     * Threshold (int) - maximum distance for matches (required)
 +    Output:
-+     * List of matching with content_id, distance, and signal values
++     * List of matching with content_id and distance values
 +    """
 +
 +    if request.method == "POST":
@@ -77,7 +77,6 @@ index 7d94e3ed..281f11b1 100644
 +        abort(400, "threshold must be a number (int or float)")
 +
 +    results = query_index_threshold(signal, signal_type_name, threshold)
-+    # Return matches without signals for faster performance
 +    matches = [
 +        {
 +            "bank_content_id": m.metadata,
@@ -100,7 +99,7 @@ index 7d94e3ed..281f11b1 100644
 +     * Signal value (the hash)
 +     * k (int) - number of top matches to return (required)
 +    Output:
-+     * List of matching with content_id, distance, and signal values
++     * List of matching with content_id and distance values
 +    """
 +    if request.method == "POST":
 +        if request.is_json:
@@ -120,7 +119,6 @@ index 7d94e3ed..281f11b1 100644
 +        abort(400, "k must be an integer")
 +
 +    results = query_index_topk(signal, signal_type_name, k)
-+    # Return matches without signals for faster performance
 +    matches = [
 +        {
 +            "bank_content_id": m.metadata,
@@ -134,7 +132,7 @@ index 7d94e3ed..281f11b1 100644
  def query_index(
      signal: str, signal_type_name: str
  ) -> t.Sequence[IndexMatchUntyped[SignalSimilarityInfo, int]]:
-@@ -173,6 +280,58 @@ def query_index(
+@@ -173,6 +270,58 @@ def query_index(
      return results
  
  
@@ -193,7 +191,7 @@ index 7d94e3ed..281f11b1 100644
  def lookup_signal(
      signal: str, signal_type_name: str, banks: t.Optional[t.Set[str]] = None
  ) -> list[int]:
-@@ -299,36 +458,59 @@ def lookup_get() -> t.Union[TMatchByBank, TBankMatchBySignalType]:
+@@ -299,36 +448,59 @@ def lookup_get() -> t.Union[TMatchByBank, TBankMatchBySignalType]:
  
  
  @bp.route("/lookup", methods=["POST"])
@@ -271,7 +269,7 @@ index 7d94e3ed..281f11b1 100644
  
  
  def lookup(
-@@ -472,7 +654,12 @@ def compare():
+@@ -472,7 +644,12 @@ def compare():
              left = signal_type.validate_signal_str(hashes_to_compare[0])
              right = signal_type.validate_signal_str(hashes_to_compare[1])
              comparison = signal_type.compare_hash(left, right)
@@ -664,3 +662,31 @@ index d2707683..dcecdfd0 100644
  def require_json_param(name: str) -> str:
      """
      Wrapper around a required POST json parameter.
+diff --git a/pdq/README.md b/pdq/README.md
+index 96f3ecb8..313e75e6 100644
+--- a/pdq/README.md
++++ b/pdq/README.md
+@@ -3,21 +3,14 @@
+ 
+ ## Description
+ 
+-This is a collection of reference implementation for the PDQ image hashing algorithm.
+-
+-PDQ stands for:
+-* **P**: A perceptual hasher: it tries to match images which people perceive as similar;
+-* **D**: It is a spectral hashing algorithm, namely, it uses a Discrete Cosine Transform (DCT);
+-* **Q**: One of its outputs is a quality metric, enabling systems to filter junky/featureless images out of processing.
+-
+-Apocryphally, it is also short for "Pretty Darn Quick", as it was designed to be efficient to run at scale. 
++This is a collection of reference implementation for the PDQ hashing algorithm.
+ 
+ Please see [../hashing.pdf](https://github.com/facebook/ThreatExchange/blob/main/hashing/hashing.pdf)
+ within this repository for an explanation of the algorithm.
+ 
+ See also the [Meta Newsroom Post](https://newsroom.fb.com/news/2019/08/open-source-photo-video-matching) for context.
+ 
+-As of November 2025 there are C++, PHP, Python, Java, and WASM implementations.  Details are in the `*/README.md` files.
++As of November 2018 there are C++, PHP, and Java implementations.  Details are in the `*/README.md` files.
+ 
+ ## Other Bindings and Implementations
+ * C# / DotNet: [crispthinking/pdqhash](https://github.com/crispthinking/PdqHash)

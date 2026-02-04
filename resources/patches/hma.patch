@@ -77,15 +77,11 @@ index 7d94e3ed..281f11b1 100644
 +        abort(400, "threshold must be a number (int or float)")
 +
 +    results = query_index_threshold(signal, signal_type_name, threshold)
-+    storage = get_storage()
-+    # Get signals for the results
-+    content_ids = [m.metadata for m in results]
-+    signals_by_content = storage.bank_content_get_signals(content_ids)
++    # Return matches without signals for faster performance
 +    matches = [
 +        {
 +            "bank_content_id": m.metadata,
 +            "distance": m.similarity_info.pretty_str(),
-+            "signal": signals_by_content.get(m.metadata, {}).get(signal_type_name, ""),
 +        }
 +        for m in results
 +    ]
@@ -124,15 +120,11 @@ index 7d94e3ed..281f11b1 100644
 +        abort(400, "k must be an integer")
 +
 +    results = query_index_topk(signal, signal_type_name, k)
-+    storage = get_storage()
-+    # Get signals for the results
-+    content_ids = [m.metadata for m in results]
-+    signals_by_content = storage.bank_content_get_signals(content_ids)
++    # Return matches without signals for faster performance
 +    matches = [
 +        {
 +            "bank_content_id": m.metadata,
 +            "distance": m.similarity_info.pretty_str(),
-+            "signal": signals_by_content.get(m.metadata, {}).get(signal_type_name, ""),
 +        }
 +        for m in results
 +    ]

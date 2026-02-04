@@ -9,7 +9,7 @@ from evaluate import Evaluator, get_logger, _log_info, _log_debug, _log_warning
 def main():
     # Read signal_type from env (fresh each call)
     SIGNAL_TYPE = os.getenv("SIGNAL_TYPE", "clip_float")
-    OUTPUT_FILE = os.getenv("OUTPUT_FILE", f"pairwise_{SIGNAL_TYPE}_compare.json")
+    OUTPUT_FILE = os.getenv("OUTPUT_FILE", f"pairwise_{SIGNAL_TYPE}_compare.csv")
     
     # Use existing logger if available, otherwise create a simple one
     logger = get_logger()

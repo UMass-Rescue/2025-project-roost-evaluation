@@ -1,4 +1,5 @@
 import os
+import sys
 import requests
 from requests import RequestException
 import json
@@ -141,7 +142,7 @@ class Evaluator:
 
 
     def add_file_to_hma_bank(self, file_path: str, bank_name: str):
-        """Add a file to the HMA bank and store its hash."""
+        """Add a file to the HMA bank and store its hash. Returns content_id if successful."""
         try:
             filename = os.path.basename(file_path)
             _log_debug(f"Adding {filename} to HMA bank and storing hash...")
@@ -151,7 +152,23 @@ class Evaluator:
                 response = requests.post(f"{hma_app_url}/c/bank/{bank_name}/content", files=files)
                 if response.ok:
                     _log_debug(f"Successfully added {filename} to bank {bank_name}")
-                    return {'status': 'success', 'response': response.text}
+                    # Try to parse JSON response to extract content_id
+                    content_id = None
+                    try:
+                        response_json = response.json()
+                        # Content ID might be in different fields depending on API response format
+                        content_id = response_json.get('id') or response_json.get('content_id') or response_json.get('bank_content_id')
+                        if content_id is not None:
+                            content_id = str(content_id)
+                    except (json.JSONDecodeError, AttributeError):
+                        # If response is not JSON or doesn't have expected fields, log it
+                        _log_debug(f"Could not parse content_id from response: {response.text[:200]}")
+                    
+                    return {
+                        'status': 'success', 
+                        'response': response.text,
+                        'content_id': content_id
+                    }
                 else:
                     _log_error(f"Failed to add {filename} to bank {bank_name}: {response.status_code} - {response.text}")
                     return {'status': 'failure', 'response': f"Failed for {filename}: {response.status_code} - {response.text}"}
@@ -333,10 +350,25 @@ class Evaluator:
             return False
 
     def upload_files_to_bank(self, files_to_send, bank_name):
-        """Upload files to the specified bank."""
+        """Upload files to the specified bank. Returns mapping of content_id -> image_path."""
+        content_id_to_image = {}
+        missing_content_ids = []
         for file_path in files_to_send:
             result = self.add_file_to_hma_bank(file_path, bank_name)
             _log_debug(result['response'])
+            # Store content_id -> image_path mapping if content_id was captured
+            if result.get('status') == 'success':
+                if result.get('content_id'):
+                    content_id_to_image[result['content_id']] = str(file_path)
+                else:
+                    missing_content_ids.append(str(file_path))
+                    _log_warning(f"No content_id found in upload response for {file_path}. Response: {result.get('response', '')[:200]}")
+        
+        if missing_content_ids:
+            _log_warning(f"Failed to capture content_id for {len(missing_content_ids)}/{len(files_to_send)} uploads. MAP calculation may be inaccurate.")
+        else:
+            _log_info(f"Successfully captured content_id for all {len(files_to_send)} uploads.")
+        return content_id_to_image
 
     def wait_for_index_update(self, expected_size=None, signal_type="clip_float", max_wait=60):
         """Wait until index contains new signal or until timeout."""
@@ -505,12 +537,13 @@ class Evaluator:
             return False
 
 def calculate_metrics(results_dir):
-    """Calculate MAP, classification PR, and distance plots."""
+    """Calculate MAP (from retrieval), classification PR (from pairwise), and distance plots."""
     # Import here to avoid circular dependency
-    from metrics.map import compute_map_from_pairwise
+    from metrics.map import compute_map_from_retrieval_csv
     from metrics.precision_recall import compute_precision_recall_from_pairwise
     from metrics.distance_distribution import compute_distance_distribution
-    from metrics.common import validate_series_metadata_exists
+    from metrics.retrieval_pr import build_content_id_to_image_map_from_labels
+    from metrics.common import validate_series_metadata_exists, load_labels
     
     labels_path = Path("resources/labels/images_series_labels.json")
     
@@ -528,36 +561,63 @@ def calculate_metrics(results_dir):
         output_root = Path(os.getenv("OUTPUT_DIR", "./results"))
         anon_map_path = output_root / "file_to_id_map" / "anon_id_map.json"
     
-    pairwise_file = results_dir / f"pairwise_{SIGNAL_TYPE}_compare.json"
+    # Look for CSV file only
+    pairwise_file = results_dir / f"pairwise_{SIGNAL_TYPE}_compare.csv"
     
     if not pairwise_file.exists():
         _log_warning(f"Pairwise results not found: {pairwise_file}")
         return
     
-    # Compute MAP
     map_output_csv = results_dir / f"map_by_series_{SIGNAL_TYPE}_results.csv"
-    try:
-        _log_info(f"Computing MAP metric for {SIGNAL_TYPE}...")
-        print(f"  MAP@k for {SIGNAL_TYPE}...", end=" ", flush=True)
-        compute_map_from_pairwise(
-            str(labels_path),
-            str(pairwise_file),
-            str(map_output_csv),
-            str(anon_map_path) if anon_map_path.exists() else None
-        )
-        print(f"✓")
-        _log_info(f"Saved to: {map_output_csv}")
-        print(f"    → {map_output_csv.name}")
-    except Exception as e:
-        print(f"✗ {e}")
-        _log_error(f"Failed to compute MAP for {SIGNAL_TYPE}: {e}")
+    topk_csv = results_dir / f"topk_test_{SIGNAL_TYPE}_results.csv"
+    threshold_csv = results_dir / f"threshold_test_{SIGNAL_TYPE}_results.csv"
     
-    # Compute classification Precision-Recall (threshold sweep)
+    # Find retrieval CSV (prefer topk, fallback to threshold)
+    retrieval_csv = topk_csv if topk_csv.exists() else (threshold_csv if threshold_csv.exists() else None)
+    result_type = "topk" if topk_csv.exists() else ("threshold" if threshold_csv.exists() else None)
+    
+    if not retrieval_csv:
+        _log_warning(f"No retrieval results found (topk or threshold) for {SIGNAL_TYPE}")
+    else:
+        # Load content_id -> image mapping from saved file (created during upload)
+        from tests.test_utils import load_content_id_mapping
+        content_id_to_image = load_content_id_mapping(results_dir, SIGNAL_TYPE)
+        
+        if content_id_to_image:
+            _log_info(f"Loaded content_id mapping ({len(content_id_to_image)} entries)")
+        else:
+            _log_warning(f"Content ID mapping file not found or empty. MAP calculation may be inaccurate.")
+            # Fallback to old method (likely incorrect)
+            uploaded_images = [str(f) for f in image_input_dir.iterdir() if f.is_file()]
+            series_to_images = load_labels(str(labels_path))
+            content_id_to_image = build_content_id_to_image_map_from_labels(
+                series_to_images, uploaded_images
+            ) if uploaded_images else {}
+        
+        try:
+            _log_info(f"Computing MAP@k from {result_type} retrieval results for {SIGNAL_TYPE}...")
+            print(f"  MAP@k ({result_type}) for {SIGNAL_TYPE}...", end=" ", flush=True)
+            compute_map_from_retrieval_csv(
+                str(retrieval_csv),
+                str(labels_path),
+                str(map_output_csv),
+                result_type=result_type,
+                anon_map_path=str(anon_map_path) if anon_map_path.exists() else None,
+                content_id_to_image=content_id_to_image
+            )
+            print(f"✓")
+            _log_info(f"Saved to: {map_output_csv}")
+            print(f"    → {map_output_csv.name}")
+        except Exception as e:
+            print(f"✗ {e}")
+            _log_error(f"Failed to compute MAP for {SIGNAL_TYPE}: {e}")
+    
+    # Compute classification Precision-Recall from pairwise - measures distance quality
     pr_csv = results_dir / f"precision_recall_{SIGNAL_TYPE}_results.csv"
     pr_plot = results_dir / f"precision_recall_{SIGNAL_TYPE}_curve.png"
     try:
-        _log_info(f"Computing classification Precision-Recall for {SIGNAL_TYPE}...")
-        print(f"  Classification PR for {SIGNAL_TYPE}...", end=" ", flush=True)
+        _log_info(f"Computing classification Precision-Recall from pairwise for {SIGNAL_TYPE}...")
+        print(f"  Classification PR (pairwise) for {SIGNAL_TYPE}...", end=" ", flush=True)
         compute_precision_recall_from_pairwise(
             str(labels_path),
             str(pairwise_file),
@@ -600,6 +660,7 @@ def run_all_tests():
     _log_info("[STARTUP] Creating fresh database for test run...")
     print("Running tests...")
     
+    # Import here to avoid circular dependency
     from metrics.common import validate_series_metadata_exists
     try:
         validate_series_metadata_exists()
@@ -624,7 +685,12 @@ def run_all_tests():
     
     files_to_send = [str(file) for file in image_input_dir.iterdir() if file.is_file()]
     print(f"Uploading {len(files_to_send)} images to bank...")
-    evaluator.upload_files_to_bank(files_to_send, BANK_NAME)
+    content_id_to_image = evaluator.upload_files_to_bank(files_to_send, BANK_NAME)
+    
+    # Save content_id -> image_path mapping to results directory for later use in metrics
+    from tests.test_utils import save_content_id_mapping
+    content_id_map_file = save_content_id_mapping(content_id_to_image, SIGNAL_TYPE)
+    _log_info(f"Saved content_id mapping to {content_id_map_file} ({len(content_id_to_image)} entries)")
     
     # Wait for index to update
     index_size_before = evaluator.get_index_size(SIGNAL_TYPE)
@@ -637,7 +703,6 @@ def run_all_tests():
     _log_info(f"Found {len(test_files)} test files: {test_files}")
     print(f"Found {len(test_files)} test files")
     # Flush to ensure output is visible
-    import sys
     sys.stdout.flush()
     
     _log_info(f"Running tests with signal_type={SIGNAL_TYPE}")
@@ -698,7 +763,12 @@ def main():
 
         files_to_send = [str(file) for file in image_input_dir.iterdir() if file.is_file()]
         print(f"Uploading {len(files_to_send)} files...")
-        evaluator.upload_files_to_bank(files_to_send, BANK_NAME)
+        content_id_to_image = evaluator.upload_files_to_bank(files_to_send, BANK_NAME)
+        
+        # Save content_id -> image_path mapping
+        from tests.test_utils import save_content_id_mapping
+        content_id_map_file = save_content_id_mapping(content_id_to_image, SIGNAL_TYPE)
+        _log_info(f"Saved content_id mapping to {content_id_map_file} ({len(content_id_to_image)} entries)")
         
         _log_info(f"Testing signal_type={SIGNAL_TYPE}")
         index_size_before = evaluator.get_index_size(SIGNAL_TYPE)

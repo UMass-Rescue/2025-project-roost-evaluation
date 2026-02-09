@@ -21,7 +21,7 @@ def main():
         max_threshold = int(os.getenv("THRESHOLD_MAX", "100"))
         step = int(os.getenv("THRESHOLD_STEP", "20"))
         thresholds = list(range(0, max_threshold + 1, step))
-    else:  # clip_float
+    else:  # clip_float (default)
         import numpy as np
         max_threshold = float(os.getenv("THRESHOLD_MAX", "1.0"))
         step = float(os.getenv("THRESHOLD_STEP", "0.2"))

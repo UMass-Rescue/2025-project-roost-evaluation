@@ -2,6 +2,8 @@ FROM python:3.10-slim
 
 RUN apt-get update && apt-get install -y iputils-ping && rm -rf /var/lib/apt/lists/*
 
+ENV PYTHONUNBUFFERED=1
+
 WORKDIR /build
 
 COPY requirements.txt /build/

@@ -33,19 +33,19 @@ To change the ThreatExchange commit: set build-time `THREATEXCHANGE_COMMIT` (in 
 
 ### 3. Run Tests
 
-**Smoke test (iterates through all available signals by default):**
+**Smoke test (uses clip_float by default):**
 ```bash
 docker compose run --rm -e BANK_NAME=SMOKE_TEST evaluation
 ```
 The smoke test cleans the database, creates a bank, uploads all images from `resources/images/`, and tests matching.
 
-**All tests (iterates through all available signals by default):**
+**All tests (uses clip_float by default):**
 ```bash
 docker compose run --rm -e EVAL_MODE=test evaluation
 ```
 Tests clean the database, create a bank, upload all images from `resources/images/`, and then run all test suites (pairwise, topk, threshold).
 
-**Test with clip (integer thresholds):**
+**Test with a different signal type:**
 ```bash
 docker compose run --rm -e EVAL_MODE=test -e SIGNAL_TYPE=clip evaluation
 ```
@@ -55,8 +55,8 @@ docker compose run --rm -e EVAL_MODE=test -e SIGNAL_TYPE=clip evaluation
 docker compose run --rm \
   -e EVAL_MODE=test \
   -e MAX_K=10 \
-  -e THRESHOLD_MAX=100 \
-  -e THRESHOLD_STEP=20 \
+  -e THRESHOLD_MAX=1.0 \
+  -e THRESHOLD_STEP=0.2 \
   evaluation
 ```
 
@@ -178,7 +178,7 @@ All test runs create detailed logs in `OUTPUT_DIR/test_run_logs/` (default `./re
 
 - **Automatic database cleanup**: Both smoke test and full test suite clean the database and populate it with test images
 - **Test isolation**: Each test run starts with a fresh database and empty index
-- **CLIP extension support**: HMA configured with CLIP signal type for semantic image matching
+- **CLIP extension support**: HMA configured with clip_float as the default signal for semantic image matching
 - **Custom endpoints**: Includes `lookup_topk` and `lookup_threshold` endpoints via patch
 - **File logging**: All test output logged to files with minimal terminal noise
 
@@ -190,19 +190,58 @@ All test runs create detailed logs in `OUTPUT_DIR/test_run_logs/` (default `./re
 - **Network**: `shared-hma-network`
 - **Config**: `omm_config.py` (includes CLIP extension)
 
+### Signal Types Configuration
+
+Signal types are configured in `omm_config.py`. This evaluation uses **CLIPFloatSignal** by default.
+
+**Available signals:**
+- **HMA built-in:**
+  - `PdqSignal`: Meta's perceptual hash for images (0-256 range)
+  - `VideoMD5Signal`: MD5 hash for exact video matching
+- **CLIP extension:**
+  - `CLIPSignal`: Integer-based CLIP embeddings (0-100 range)
+  - `CLIPFloatSignal`: Float-based CLIP embeddings (0.0-1.0 range) - **default**
+
+To enable additional signals, edit `omm_config.py` and uncomment the desired signal types in the `signal_types` list.
+
+### CLIP Index Configuration
+
+The CLIP extension supports two index types for `clip_float`:
+- **HNSW (Approximate)**: Fast approximate nearest neighbor search (default)
+- **Flat (Exact)**: Exact search using brute-force comparison
+
+To disable HNSW and use exact/flat search, add to the `hma-app` service in `docker-compose.yaml`:
+```yaml
+hma-app:
+  environment:
+    <<: *omm-variables
+    CLIP_DISABLE_HNSW_INDEX: 'true'
+```
+
+**Check which index type is being used** (logs appear when index is loaded at runtime):
+```bash
+# After running tests - check signal-level wrapper
+docker compose logs hma-app 2>&1 | grep "CLIP_SIGNAL_INDEX_TYPE" | head -1
+# Example output: CLIPHNSWIndex (approximate/hnsw search wrapper, M=32, ef_construction=200, ef_search=128)
+
+# Or check matcher-level FAISS index
+docker compose logs hma-app 2>&1 | grep "CLIP_MATCHER_INDEX_TYPE" | head -1
+# Example output: CLIPHNSWVectorIndex (approximate/hnsw search, M=32, ef_construction=200, ef_search=128)
+```
+
+With `CLIP_DISABLE_HNSW_INDEX: 'true'` you'll see `CLIPFloatIndex (exact/flat)` or `CLIPFloatVectorIndex (exact/flat)` instead.
+
 ## Environment Variables
 
 ### Test Configuration
 - `EVAL_MODE`: `smoke` (default) or `test`
 - `BANK_NAME`: Bank name for testing (default: `TEST_BANK_DATA`)
-- `SIGNAL_TYPE`: Signal type for matching (optional)
-  - If **not set**: Iterates through all available signals (default behavior; currently `clip` and `clip_float`)
-  - If **set**: Tests only the specified signal type (e.g., `SIGNAL_TYPE=clip`)
-  - `clip_float`: Float-based distance/thresholds (0.0-1.0 range)
-  - `clip`: Integer-based distance/thresholds (0-100 range)
+- `SIGNAL_TYPE`: Signal type for matching (default: `clip_float`)
+  - `clip_float`: Float-based distance/thresholds (0.0-1.0 range) - **default**
+  - Can be changed to other signal types if available (e.g., `SIGNAL_TYPE=clip` for integer-based thresholds)
 - `MAX_K`: Maximum k for top-k test (default: `5`)
-- `THRESHOLD_MAX`: Maximum threshold value (default: `100` for clip, `1.0` for clip_float)
-- `THRESHOLD_STEP`: Threshold step size (default: `20` for clip, `0.2` for clip_float)
+- `THRESHOLD_MAX`: Maximum threshold value (default: `1.0` for clip_float, `100` for clip)
+- `THRESHOLD_STEP`: Threshold step size (default: `0.2` for clip_float, `20` for clip)
 
 ### HMA Connection (auto-configured in docker-compose)
 - `HMA_HOST`: `hma-app` (internal container name)

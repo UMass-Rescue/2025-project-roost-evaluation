@@ -56,6 +56,8 @@ services:
       - "5005:5100"
     environment:
       <<: *omm-variables
+      # Uncomment to use exact/flat search instead of HNSW (approximate)
+      # CLIP_DISABLE_HNSW_INDEX: 'true'
     depends_on:
       hma-postgresql:
         condition: service_healthy

@@ -1,9 +1,9 @@
 import os
 import itertools
-import json
 import sys
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from tqdm import tqdm
-from tests.test_utils import get_image_files, hash_image, write_results, decode_clip_hex_to_floats
+from tests.test_utils import get_image_files, hash_image, write_results
 from evaluate import Evaluator, get_logger, _log_info, _log_debug, _log_warning
 
 def main():
@@ -32,21 +32,19 @@ def main():
             available_types = list(resp.keys()) if isinstance(resp, dict) else "unknown"
             _log_warning(f"Hash response for {img} does not contain signal type '{SIGNAL_TYPE}'. Available types: {available_types}. Response: {resp}")
 
-    results = []
-    total_pairs = len(list(itertools.combinations(image_files, 2)))
-    _log_info(f"Comparing {total_pairs} image pairs...")
-    
-    # tqdm for terminal progress, _log_info for log file
-    pairs_iter = itertools.combinations(image_files, 2)
-    for img1, img2 in tqdm(pairs_iter, total=total_pairs, desc="Pairwise test progress", file=sys.stderr, ncols=80, disable=False):
-        _log_info(f"Comparing {img1} <--> {img2}")
-
+    def compare_pair(pair):
+        """Worker function to compare a single pair of images."""
+        img1, img2 = pair
         clip1 = image_hashes.get(img1)
         clip2 = image_hashes.get(img2)
 
         if not clip1 or not clip2:
-            _log_warning(f"Missing hashes for {img1} or {img2}. Skipping.")
-            continue
+            return {
+                "image1": img1,
+                "image2": img2,
+                "matched": False,
+                "distance": None,
+            }
 
         compare_resp = evaluator.compare_hashes(clip1, clip2, signal_type=SIGNAL_TYPE)
 
@@ -56,20 +54,34 @@ def main():
             try:
                 distance = compare_resp["result"][1]
                 matched = compare_resp["result"][0]
-                _log_info(f"✓ Comparison: matched={matched}, distance={distance}")
             except (ValueError, TypeError):
-                _log_warning(f"Failed to parse compare result: {compare_resp}")
-        else:
-            _log_warning(f"Compare API failed: {compare_resp.get('error', 'Unknown error')}")
+                pass
 
-        result = {
+        return {
             "image1": img1,
             "image2": img2,
             "matched": matched,
             "distance": distance,
         }
-        results.append(result)
-        _log_debug(json.dumps(result, indent=2))
+
+    pairs = list(itertools.combinations(image_files, 2))
+    total_pairs = len(pairs)
+    _log_info(f"Comparing {total_pairs} image pairs with parallelization...")
+    
+    # Parallel processing with ThreadPoolExecutor
+    max_workers = int(os.getenv("MAX_WORKERS", "8"))
+    results = []
+    
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = {executor.submit(compare_pair, pair): pair for pair in pairs}
+        
+        for future in tqdm(as_completed(futures), total=total_pairs, desc="Pairwise test progress", file=sys.stderr, ncols=80):
+            try:
+                result = future.result()
+                results.append(result)
+                _log_debug(f"Compared: {result['image1']} <-> {result['image2']}, distance={result['distance']}, matched={result['matched']}")
+            except Exception as e:
+                _log_warning(f"Pair comparison failed: {e}")
 
     output_path = write_results(results, OUTPUT_FILE)
     print(f"[INFO] Pairwise CLIP comparison complete. Results saved to {output_path}")

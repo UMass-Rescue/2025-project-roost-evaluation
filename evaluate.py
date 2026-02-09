@@ -6,6 +6,7 @@ import json
 import time
 from pathlib import Path
 import logging
+from series_labels_utils import get_image_files, ensure_labels_file
 from datetime import datetime
 
 # Try to import psycopg2 for database access (optional)
@@ -23,6 +24,8 @@ hash_url = hma_app_url +  "/h/hash"
 match_url = hma_app_url + "/m/lookup"
 match_url_topk = hma_app_url + "/m/lookup_topk"
 match_url_threshold = hma_app_url + "/m/lookup_threshold"
+
+LABELS_PATH_ENV = "LABELS_PATH"
 
 # Signal type to use - defaults to clip_float
 # Can be overridden via SIGNAL_TYPE env var
@@ -545,7 +548,9 @@ def calculate_metrics(results_dir):
     from metrics.retrieval_pr import build_content_id_to_image_map_from_labels
     from metrics.common import validate_series_metadata_exists, load_labels
     
-    labels_path = Path("resources/labels/images_series_labels.json")
+    labels_path = Path(os.getenv(LABELS_PATH_ENV, "resources/labels/images_series_labels.json"))
+    image_dir = Path(os.environ.get("IMAGE_INPUT_DIR", str(image_input_dir)))
+    labels_path = ensure_labels_file(labels_path, image_dir)
     
     try:
         validate_series_metadata_exists(str(labels_path))
@@ -588,7 +593,7 @@ def calculate_metrics(results_dir):
         else:
             _log_warning(f"Content ID mapping file not found or empty. MAP calculation may be inaccurate.")
             # Fallback to old method (likely incorrect)
-            uploaded_images = [str(f) for f in image_input_dir.iterdir() if f.is_file()]
+            uploaded_images = get_image_files(image_dir)
             series_to_images = load_labels(str(labels_path))
             content_id_to_image = build_content_id_to_image_map_from_labels(
                 series_to_images, uploaded_images
@@ -655,6 +660,7 @@ def calculate_metrics(results_dir):
         _log_error(f"Failed to generate distance distribution for {SIGNAL_TYPE}: {e}")
 
 def run_all_tests():
+    start_time = time.time()
     setup_logging("test")
     global log_file  # Ensure we can access the log_file variable
     _log_info("[STARTUP] Creating fresh database for test run...")
@@ -683,7 +689,8 @@ def run_all_tests():
         _log_error("Failed to setup bank. Exiting.")
         return
     
-    files_to_send = [str(file) for file in image_input_dir.iterdir() if file.is_file()]
+    image_dir = Path(os.environ.get("IMAGE_INPUT_DIR", str(image_input_dir)))
+    files_to_send = get_image_files(image_dir)
     print(f"Uploading {len(files_to_send)} images to bank...")
     content_id_to_image = evaluator.upload_files_to_bank(files_to_send, BANK_NAME)
     
@@ -692,10 +699,11 @@ def run_all_tests():
     content_id_map_file = save_content_id_mapping(content_id_to_image, SIGNAL_TYPE)
     _log_info(f"Saved content_id mapping to {content_id_map_file} ({len(content_id_to_image)} entries)")
     
-    # Wait for index to update
+    # Wait for index to update (longer timeout for large datasets)
     index_size_before = evaluator.get_index_size(SIGNAL_TYPE)
     expected_size = index_size_before + len(files_to_send)
-    evaluator.wait_for_index_update(expected_size, SIGNAL_TYPE)
+    max_wait = 180 if len(files_to_send) > 100 else 60  # 3 min for large datasets, 1 min for small
+    evaluator.wait_for_index_update(expected_size, SIGNAL_TYPE, max_wait=max_wait)
     _log_info(f"{SIGNAL_TYPE} index updated. Current size: {evaluator.get_index_size(SIGNAL_TYPE)}")
     
     test_dir = os.path.join(os.path.dirname(__file__), "tests")
@@ -745,6 +753,13 @@ def run_all_tests():
     output_root = Path(os.getenv("OUTPUT_DIR", "./results"))
     results_dir = output_root / "evaluation_results" / timestamp
     calculate_metrics(results_dir)
+    
+    # Print elapsed time
+    elapsed_time = time.time() - start_time
+    elapsed_minutes = int(elapsed_time // 60)
+    elapsed_seconds = int(elapsed_time % 60)
+    print(f"\n⏱  Total time elapsed: {elapsed_minutes}m {elapsed_seconds}s")
+    _log_info(f"Total time elapsed: {elapsed_minutes}m {elapsed_seconds}s ({elapsed_time:.2f}s)")
 
 def main():
     eval_mode = os.environ.get("EVAL_MODE", "smoke")
@@ -761,7 +776,8 @@ def main():
         if not evaluator.setup_bank(BANK_NAME):
             return
 
-        files_to_send = [str(file) for file in image_input_dir.iterdir() if file.is_file()]
+        image_dir = Path(os.environ.get("IMAGE_INPUT_DIR", str(image_input_dir)))
+        files_to_send = get_image_files(image_dir)
         print(f"Uploading {len(files_to_send)} files...")
         content_id_to_image = evaluator.upload_files_to_bank(files_to_send, BANK_NAME)
         

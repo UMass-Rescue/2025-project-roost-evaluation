@@ -3,7 +3,7 @@ import itertools
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from tqdm import tqdm
-from tests.test_utils import get_image_files, hash_image, write_results
+from tests.test_utils import get_image_files, hash_image, hash_images_batch, write_results
 from evaluate import Evaluator, get_logger, _log_info, _log_debug, _log_warning
 
 def main():
@@ -19,18 +19,19 @@ def main():
     print(f"[INFO] Found {len(image_files)} images. Starting pairwise CLIP hash comparison...")
     _log_info(f"Found {len(image_files)} images. Starting pairwise CLIP hash comparison...")
 
-    # Cache hashes
+    # Cache hashes using batch endpoint for better throughput
     image_hashes = {}
-    _log_info("Caching image hashes...")
-    for img in image_files:
-        resp = hash_image(evaluator, img)
+    batch_size = int(os.getenv("HASH_BATCH_SIZE", "32"))
+    _log_info(f"Batch hashing {len(image_files)} images (batch_size={batch_size})...")
+    batch_results = hash_images_batch(evaluator, image_files, signal_type=SIGNAL_TYPE, batch_size=batch_size)
+    for img, resp in zip(image_files, batch_results):
         if isinstance(resp, dict) and SIGNAL_TYPE in resp:
             image_hashes[img] = resp[SIGNAL_TYPE]
             _log_debug(f"Cached hash for {img}")
         else:
-            # Hash succeeded but signal type not found - show available signal types
             available_types = list(resp.keys()) if isinstance(resp, dict) else "unknown"
             _log_warning(f"Hash response for {img} does not contain signal type '{SIGNAL_TYPE}'. Available types: {available_types}. Response: {resp}")
+    _log_info(f"Batch hashing complete: {len(image_hashes)}/{len(image_files)} successful")
 
     def compare_pair(pair):
         """Worker function to compare a single pair of images."""

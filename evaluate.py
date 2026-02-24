@@ -20,7 +20,8 @@ image_input_dir = Path("./resources/images")
 hma_host = os.getenv("HMA_HOST", "host.docker.internal")
 hma_port = os.getenv("HMA_PORT", "5005")
 hma_app_url = f"http://{hma_host}:{hma_port}"
-hash_url = hma_app_url +  "/h/hash"  
+hash_url = hma_app_url +  "/h/hash"
+hash_batch_url = hma_app_url + "/h/hash/batch"
 match_url = hma_app_url + "/m/lookup"
 match_url_topk = hma_app_url + "/m/lookup_topk"
 match_url_threshold = hma_app_url + "/m/lookup_threshold"
@@ -200,6 +201,104 @@ class Evaluator:
                     'status_code': 500,
                     'error': str(e)
                 }
+
+    def hash_local_content_batch(self, file_paths: list, signal_type: str = None, batch_size: int = 32) -> list:
+        """Hash multiple files via /h/hash/batch. Returns list of hash dicts in input order.
+
+        Falls back to individual hashing if the batch request fails.
+        """
+        all_results = []
+        for i in range(0, len(file_paths), batch_size):
+            batch = file_paths[i:i + batch_size]
+            file_handles = []
+            try:
+                files_payload = []
+                for fp in batch:
+                    fh = open(fp, 'rb')
+                    file_handles.append(fh)
+                    files_payload.append(('photo', (os.path.basename(fp), fh)))
+
+                params = {}
+                if signal_type:
+                    params['signal_type'] = signal_type
+
+                response = requests.post(hash_batch_url, files=files_payload, params=params)
+                if response.ok:
+                    batch_results = response.json()
+                    if isinstance(batch_results, list) and len(batch_results) == len(batch):
+                        all_results.extend(batch_results)
+                    else:
+                        _log_warning(f"Batch hash returned unexpected format, falling back to individual hashing")
+                        for fp in batch:
+                            all_results.append(self.hash_local_content(fp))
+                else:
+                    _log_warning(f"Batch hash failed ({response.status_code}), falling back to individual hashing")
+                    for fp in batch:
+                        all_results.append(self.hash_local_content(fp))
+            except RequestException as e:
+                _log_warning(f"Batch hash request exception: {e}, falling back to individual hashing")
+                for fp in batch:
+                    all_results.append(self.hash_local_content(fp))
+            finally:
+                for fh in file_handles:
+                    fh.close()
+        return all_results
+
+    def match_with_signal_topk(self, signal: str, k: int, signal_type: str) -> dict:
+        """Look up top-k matches using a pre-computed hash signal."""
+        data = {
+            'signal_type': signal_type,
+            'signal': signal,
+            'k': k
+        }
+        try:
+            response = requests.post(match_url_topk, json=data)
+            if response.ok:
+                result = response.json()
+                return {
+                    'status': 'success',
+                    'matches': result.get("matches", []),
+                    'signal_type': signal_type,
+                    'signal': signal
+                }
+            else:
+                _log_debug(f"API request failed: {response.status_code} - {response.text}")
+                return {
+                    'status': 'failure',
+                    'error': f'API request failed with status {response.status_code}',
+                    'response': response.text
+                }
+        except RequestException as e:
+            _log_debug(f"Request exception: {str(e)}")
+            return {'status': 'failure', 'error': str(e)}
+
+    def match_with_signal_threshold(self, signal: str, threshold, signal_type: str) -> dict:
+        """Look up matches within a threshold using a pre-computed hash signal."""
+        data = {
+            'signal_type': signal_type,
+            'signal': signal,
+            'threshold': threshold
+        }
+        try:
+            response = requests.post(match_url_threshold, json=data)
+            if response.ok:
+                result = response.json()
+                return {
+                    'status': 'success',
+                    'matches': result.get("matches", []),
+                    'signal_type': signal_type,
+                    'signal': signal
+                }
+            else:
+                _log_debug(f"API request failed: {response.status_code} - {response.text}")
+                return {
+                    'status': 'failure',
+                    'error': f'API request failed with status {response.status_code}',
+                    'response': response.text
+                }
+        except RequestException as e:
+            _log_debug(f"Request exception: {str(e)}")
+            return {'status': 'failure', 'error': str(e)}
 
     def match_local_content(self, file_path: str, signal_type: str) -> dict:
         hasher_resp = self.hash_local_content(file_path)
@@ -387,12 +486,35 @@ class Evaluator:
 
 
     def match_uploaded_files(self, files_to_send, signal_type: str):
-        """Match each uploaded file and print the response."""
+        """Match each uploaded file using batch hashing + per-file lookup."""
         _log_info("Sleeping 35 seconds to allow in-memory index cache to refresh...")
         time.sleep(35)
-        for match_file_path in files_to_send:
+        batch_size = int(os.getenv("HASH_BATCH_SIZE", "32"))
+        _log_info(f"Batch hashing {len(files_to_send)} files for matching (batch_size={batch_size})...")
+        batch_results = self.hash_local_content_batch(files_to_send, signal_type=signal_type, batch_size=batch_size)
+        for match_file_path, hash_resp in zip(files_to_send, batch_results):
             _log_debug(match_file_path)
-            match_resp = self.match_local_content(match_file_path, signal_type)
+            if not isinstance(hash_resp, dict) or signal_type not in hash_resp:
+                _log_warning(f"Hash failed for {match_file_path}: {hash_resp}")
+                continue
+            signal = hash_resp[signal_type]
+            data = {
+                'signal_type': signal_type,
+                'signal': signal
+            }
+            try:
+                response = requests.post(match_url, json=data)
+                if response.ok:
+                    match_resp = {
+                        'status': 'success',
+                        'matches': response.json(),
+                        'signal_type': signal_type,
+                        'signal': signal
+                    }
+                else:
+                    match_resp = {'status': 'failure', 'error': response.text}
+            except RequestException as e:
+                match_resp = {'status': 'failure', 'error': str(e)}
             _log_debug(json.dumps(match_resp, indent=2))
 
     def compare_hashes(self, hash1, hash2, signal_type: str) -> dict:

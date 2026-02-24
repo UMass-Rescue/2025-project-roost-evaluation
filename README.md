@@ -8,8 +8,11 @@ This project evaluates content matching capabilities using HMA (Hasher-Matcher-A
 
 - Docker and Docker Compose
 - Git
+- (Optional) NVIDIA GPU with nvidia-container-toolkit for GPU acceleration – default is CPU; see [GPU_SETUP.md](GPU_SETUP.md) to enable
 
 ## Quick Start
+
+**Note:** For GPU acceleration setup on Linux with NVIDIA GPU, see [GPU_SETUP.md](GPU_SETUP.md) before proceeding.
 
 ### 1. Create Docker Network
 

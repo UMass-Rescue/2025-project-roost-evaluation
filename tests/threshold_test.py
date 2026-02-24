@@ -2,7 +2,7 @@ import os
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from tqdm import tqdm
-from tests.test_utils import get_image_files, write_results
+from tests.test_utils import get_image_files, hash_images_batch, write_results
 from evaluate import Evaluator, get_logger, _log_info, _log_debug, _log_warning
 
 def main():
@@ -30,10 +30,30 @@ def main():
     print(f"[INFO] Found {len(image_files)} images. Starting threshold match test with thresholds={list(thresholds)}...")
     _log_info(f"Found {len(image_files)} images. Starting threshold match test with thresholds={list(thresholds)}...")
 
+    # Batch hash all images upfront
+    batch_size = int(os.getenv("HASH_BATCH_SIZE", "32"))
+    _log_info(f"Batch hashing {len(image_files)} images (batch_size={batch_size})...")
+    batch_results = hash_images_batch(evaluator, image_files, signal_type=SIGNAL_TYPE, batch_size=batch_size)
+    image_hashes = {}
+    for img, resp in zip(image_files, batch_results):
+        if isinstance(resp, dict) and SIGNAL_TYPE in resp:
+            image_hashes[img] = resp[SIGNAL_TYPE]
+        else:
+            _log_warning(f"Batch hash failed for {img}: {resp}")
+    _log_info(f"Batch hashing complete: {len(image_hashes)}/{len(image_files)} successful")
+
     def test_threshold(item):
-        """Worker function to test a single image-threshold combination."""
+        """Worker function to test a single image-threshold combination using cached hash."""
         threshold, img = item
-        match_resp = evaluator.match_local_content_threshold(img, threshold, SIGNAL_TYPE)
+        signal = image_hashes.get(img)
+        if not signal:
+            return {
+                "image": img,
+                "threshold": threshold,
+                "error": f"No cached hash for {img}",
+                "response": ""
+            }
+        match_resp = evaluator.match_with_signal_threshold(signal, threshold, SIGNAL_TYPE)
 
         if match_resp.get("status") == "success":
             return {

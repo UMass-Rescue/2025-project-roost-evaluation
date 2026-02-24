@@ -16,7 +16,7 @@ def normalize_label_path(path_str: str) -> str:
 
 
 def normalize_pairwise_path(path_str: str) -> str:
-    """Normalize pairwise result paths, stripping container mount prefixes."""
+    """Normalize pairwise result paths, stripping container mount prefixes and absolute paths."""
     p = path_str.replace("\\", "/")
     if p.startswith("/build/"):
         p = p[len("/build/"):]
@@ -26,6 +26,11 @@ def normalize_pairwise_path(path_str: str) -> str:
         p = p[2:]
     if p.startswith("/"):
         p = p[1:]
+    # Native runs use absolute paths (e.g. /home/user/project/resources/images/...)
+    # Extract resources/... suffix so labels and pairwise use the same canonical form
+    if "resources/" in p:
+        idx = p.index("resources/")
+        p = p[idx:]
     return p
 
 

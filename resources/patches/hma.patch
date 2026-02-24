@@ -1,5 +1,5 @@
 diff --git a/.github/workflows/hma-ci.yaml b/.github/workflows/hma-ci.yaml
-index 00cff0e0..ae5d513f 100644
+index 00cff0e04..ae5d513f1 100644
 --- a/.github/workflows/hma-ci.yaml
 +++ b/.github/workflows/hma-ci.yaml
 @@ -11,6 +11,7 @@ on:
@@ -10,8 +10,221 @@ index 00cff0e0..ae5d513f 100644
      paths:
        - "hasher-matcher-actioner/**"
        - ".github/workflows/hma-ci.yaml"
+diff --git a/hasher-matcher-actioner/docs/api.md b/hasher-matcher-actioner/docs/api.md
+index d6408fc0a..d50949c93 100644
+--- a/hasher-matcher-actioner/docs/api.md
++++ b/hasher-matcher-actioner/docs/api.md
+@@ -185,6 +185,92 @@ Example:
+ curl -s -X POST --form photo='@example.png' http://localhost:5100/h/hash
+ ```
+ 
++### Batch hashing content
++
++This endpoint allows you to hash multiple files in a single request. This is particularly beneficial for GPU-accelerated hashers (like CLIP) where batch processing can provide 5-10x throughput improvements compared to processing files individually.
++
++This endpoint uses a `multipart/form-data` request body. The field name is the ContentType (typically `photo` or `video`). Multiple files can be uploaded using the same field name.
++
++Endpoint: `POST /h/hash/batch`
++Query parameters:
++- `signal_type` (optional): Single signal type name (e.g., `signal_type=clip`). If omitted, all enabled signal types are computed.
++
++Sample JSON response when computing all signal types (results are returned in the same order as files were uploaded):
++```json
++[
++  {
++    "pdq": "d811ac390bfa6005d08543fe27fd5a11f6b55bdd2603000dc26476fc79fc76b5",
++    "clip": "0110101010..."
++  },
++  {
++    "pdq": "fff0f0cce0e4a04f6b55bdd2603000dc26476fc79fc76b5",
++    "clip": "1010101010..."
++  }
++]
++```
++
++Sample JSON response when `signal_type=clip` is specified:
++```json
++[
++  {
++    "clip": "0110101010..."
++  },
++  {
++    "clip": "1010101010..."
++  }
++]
++```
++
++Example using curl (all enabled signal types):
++```bash
++curl -X POST \
++  -F "photo=@/path/to/image1.jpg" \
++  -F "photo=@/path/to/image2.png" \
++  http://localhost:5100/h/hash/batch
++```
++
++Example using curl (single signal type):
++```bash
++curl -X POST \
++  -F "photo=@/path/to/image1.jpg" \
++  -F "photo=@/path/to/image2.png" \
++  "http://localhost:5100/h/hash/batch?signal_type=clip"
++```
++
++Example using Python:
++```python
++import requests
++
++files = [
++    ('photo', open('/path/to/image1.jpg', 'rb')),
++    ('photo', open('/path/to/image2.png', 'rb')),
++]
++
++# Without signal_type param - computes all enabled signal types
++response = requests.post('http://localhost:5100/h/hash/batch', files=files)
++results = response.json()
++
++# With signal_type param - computes only that signal type
++response = requests.post(
++    'http://localhost:5100/h/hash/batch',
++    files=files,
++    params={'signal_type': 'clip'}
++)
++results = response.json()
++
++# Process results: results is a list, one dict per file
++# Results are returned in the same order as files were uploaded
++# Each dict maps signal type names to hash values
++for i, file_result in enumerate(results):
++    print(f"File {i+1}:")
++    for signal_type, hash_value in file_result.items():
++        print(f"  {signal_type}: {hash_value}")
++```
++
++**Note**: 
++- Results are returned in the same sequential order as files were uploaded (first file = first result, second file = second result, etc.)
++- The endpoint automatically detects if signal types support batch processing (e.g., CLIP with `hash_from_file_list`). For batch-capable signal types, all files are processed together for optimal GPU utilization. Other signal types are processed individually per file.
++
+ ### Hashing and matching
+ 
+ **Warning**: This endpoint may be slow. Large timeout values or long-polling are recommended.
+diff --git a/hasher-matcher-actioner/src/OpenMediaMatch/blueprints/hashing.py b/hasher-matcher-actioner/src/OpenMediaMatch/blueprints/hashing.py
+index a7a251aa2..a6baf1a77 100644
+--- a/hasher-matcher-actioner/src/OpenMediaMatch/blueprints/hashing.py
++++ b/hasher-matcher-actioner/src/OpenMediaMatch/blueprints/hashing.py
+@@ -246,6 +246,111 @@ def hash_media_from_form_data() -> dict[str, str]:
+     return ret
+ 
+ 
++@bp.route("/hash/batch", methods=["POST"])
++def hash_media_batch():
++    """
++    Calculate hashes for multiple files in a single request.
++    
++    Optimized for batch processing, particularly beneficial for GPU-accelerated
++    hashers where processing multiple images together provides
++    5-10x throughput improvements.
++    
++    Input:
++        * files - multipart/form-data with multiple files
++        * Query params: signal_type (optional) - single signal type name. If omitted, all enabled signal types are computed.
++    
++    Output:
++        * List of objects mapping signal types to hash values
++    """
++    if not request.files:
++        abort(400, "Missing multipart/form-data file upload")
++    
++    # Collect all files
++    files_data = []
++    for field_name in request.files.keys():
++        content_type = _lookup_content_type(field_name)
++        all_signal_types = get_storage().get_enabled_signal_types_for_content_type(content_type)
++        
++        if not all_signal_types:
++            abort(500, "No signal types configured!")
++        
++        # Filter to single signal type if specified
++        signal_type_name = request.args.get("signal_type", None)
++        if signal_type_name:
++            signal_type_name = signal_type_name.strip()
++            if signal_type_name not in all_signal_types:
++                abort(400, f"Signal type '{signal_type_name}' doesn't exist or is disabled")
++            signal_types = {signal_type_name: all_signal_types[signal_type_name]}
++        else:
++            signal_types = all_signal_types
++        
++        for file in request.files.getlist(field_name):
++            files_data.append((file.filename or "unknown", file.stream.read(), signal_types))
++    
++    if not files_data:
++        abort(400, "No files provided")
++    
++    # Check for batch-capable signal types (e.g., CLIP with hash_from_file_list)
++    batch_capable = {}
++    for st_name, st in files_data[0][2].items():
++        if hasattr(st, 'hash_from_file_list') and issubclass(st, FileHasher):
++            batch_capable[st_name] = st
++    
++    # Process batch-capable types together
++    batch_results = {}
++    if batch_capable:
++        temp_files = []
++        try:
++            # Write all files to temp locations
++            for filename, file_bytes, _ in files_data:
++                tmp = tempfile.NamedTemporaryFile("wb", delete=False, suffix=Path(filename).suffix)
++                tmp.write(file_bytes)
++                tmp.close()
++                temp_files.append(Path(tmp.name))
++            
++            # Batch process each batch-capable signal type
++            for st_name, st in batch_capable.items():
++                try:
++                    batch_outputs = st.hash_from_file_list(temp_files)
++                    # Convert CLIPOutput or other objects to strings
++                    batch_results[st_name] = [str(h) for h in batch_outputs]
++                except Exception as e:
++                    current_app.logger.error("Batch hashing failed for %s: %s", st_name, str(e))
++                    batch_results[st_name] = None
++        finally:
++            # Clean up temp files
++            for temp_file in temp_files:
++                try:
++                    temp_file.unlink()
++                except Exception:
++                    pass
++    
++    # Build results for each file (results are returned in the same order as files were uploaded)
++    results = []
++    for idx, (filename, file_bytes, signal_types) in enumerate(files_data):
++        file_result = {}
++        
++        for st_name, st in signal_types.items():
++            try:
++                if st_name in batch_results and batch_results[st_name]:
++                    # Use batch result
++                    file_result[st_name] = batch_results[st_name][idx]
++                elif issubclass(st, BytesHasher):
++                    file_result[st_name] = st.hash_from_bytes(file_bytes)
++                elif issubclass(st, FileHasher):
++                    with tempfile.NamedTemporaryFile("wb") as tmp:
++                        tmp.file.write(file_bytes)
++                        path = Path(tmp.name)
++                        file_result[st_name] = st.hash_from_file(path)
++            except Exception as e:
++                current_app.logger.warning("Failed to hash %s with %s: %s", filename, st_name, str(e))
++                file_result[st_name] = ""
++        
++        results.append(file_result)
++    
++    return results
++
++
+ def _parse_request_content_type(url_content_type: str) -> t.Type[ContentType]:
+     arg = request.args.get("content_type", "")
+     if not arg:
 diff --git a/hasher-matcher-actioner/src/OpenMediaMatch/blueprints/matching.py b/hasher-matcher-actioner/src/OpenMediaMatch/blueprints/matching.py
-index 7d94e3ed..58a51c71 100644
+index 7d94e3ed1..58a51c711 100644
 --- a/hasher-matcher-actioner/src/OpenMediaMatch/blueprints/matching.py
 +++ b/hasher-matcher-actioner/src/OpenMediaMatch/blueprints/matching.py
 @@ -27,6 +27,7 @@ from OpenMediaMatch.storage import interface
@@ -284,7 +497,7 @@ index 7d94e3ed..58a51c71 100644
              abort(400, f"Invalid {signal_type_str} hash: {e}")
      return results
 diff --git a/hasher-matcher-actioner/src/OpenMediaMatch/tests/test_api.py b/hasher-matcher-actioner/src/OpenMediaMatch/tests/test_api.py
-index 4dfc39ca..86d48cf4 100644
+index 4dfc39ca4..86d48cf4f 100644
 --- a/hasher-matcher-actioner/src/OpenMediaMatch/tests/test_api.py
 +++ b/hasher-matcher-actioner/src/OpenMediaMatch/tests/test_api.py
 @@ -146,7 +146,7 @@ def test_compare_hashes(app: Flask, client: FlaskClient):
@@ -297,7 +510,7 @@ index 4dfc39ca..86d48cf4 100644
      # Malformed input
      bad_inputs = [
 diff --git a/hasher-matcher-actioner/src/OpenMediaMatch/tests/test_match_api.py b/hasher-matcher-actioner/src/OpenMediaMatch/tests/test_match_api.py
-index 3a558d52..024a2e87 100644
+index 3a558d52c..024a2e87d 100644
 --- a/hasher-matcher-actioner/src/OpenMediaMatch/tests/test_match_api.py
 +++ b/hasher-matcher-actioner/src/OpenMediaMatch/tests/test_match_api.py
 @@ -1,12 +1,14 @@
@@ -640,7 +853,7 @@ index 3a558d52..024a2e87 100644
  def client_with_multi_bank_data(app) -> FlaskClient:
      """Fixture that sets up multiple banks with sample data for testing bank filtering."""
 diff --git a/hasher-matcher-actioner/src/OpenMediaMatch/utils/flask_utils.py b/hasher-matcher-actioner/src/OpenMediaMatch/utils/flask_utils.py
-index d2707683..dcecdfd0 100644
+index d2707683f..dcecdfd02 100644
 --- a/hasher-matcher-actioner/src/OpenMediaMatch/utils/flask_utils.py
 +++ b/hasher-matcher-actioner/src/OpenMediaMatch/utils/flask_utils.py
 @@ -36,6 +36,18 @@ def require_request_param(name: str) -> str:
@@ -663,7 +876,7 @@ index d2707683..dcecdfd0 100644
      """
      Wrapper around a required POST json parameter.
 diff --git a/pdq/README.md b/pdq/README.md
-index 96f3ecb8..313e75e6 100644
+index 96f3ecb88..313e75e6a 100644
 --- a/pdq/README.md
 +++ b/pdq/README.md
 @@ -3,21 +3,14 @@

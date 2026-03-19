@@ -144,8 +144,7 @@ def write_results(results, filename):
                 distance = distance.get("distance", distance)
             # Only include rows with valid distances
             if distance is not None and distance != "":
-                # Convert to string, handling both numeric and string values
-                distance_str = str(distance) if not isinstance(distance, (int, float)) else str(distance)
+                distance_str = str(distance)
                 rows.append({
                     "image1": r.get("image1", ""), 
                     "image2": r.get("image2", ""), 

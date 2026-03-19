@@ -77,72 +77,6 @@ def load_retrieval_results_csv(csv_path: str, result_type: str = "threshold") ->
     return results_by_query
 
 
-def build_content_id_to_image_map(
-    labels_path: str,
-    anon_map_path: Optional[str] = None
-) -> Dict[str, str]:
-    """
-    Build mapping from bank_content_id to image path.
-    This requires matching content IDs to images in the labels.
-    
-    Note: This is a simplified version. In practice, you'd need to track
-    which content_id corresponds to which image during bank upload.
-    For now, we'll use image paths directly if they match.
-    """
-    # Load labels to get all image paths
-    series_to_images = load_labels(labels_path)
-    all_images = set()
-    for images in series_to_images.values():
-        all_images.update(images)
-    
-    # Build reverse mapping (normalized path -> original path)
-    # This is a placeholder - in real implementation, you'd track content_id during upload
-    content_id_to_image: Dict[str, str] = {}
-    
-    # If we have anon map, we can use it
-    id_to_path = load_anon_id_map(anon_map_path) if anon_map_path else None
-    
-    # For now, assume content_id might be numeric and we need to map it
-    # This is a limitation - ideally content_id should map to image paths
-    # For this to work properly, you'd need to store content_id -> image mapping during upload
-    
-    return content_id_to_image
-
-
-def build_content_id_to_image_map_from_labels(
-    series_to_images: Dict[str, Set[str]],
-    uploaded_images: List[str]
-) -> Dict[str, str]:
-    """
-    Build content_id -> image mapping assuming content_ids are assigned sequentially
-    based on upload order. This is a workaround - ideally content_id should be tracked
-    during bank upload.
-    
-    Args:
-        series_to_images: Series -> set of image paths
-        uploaded_images: List of images in upload order
-    
-    Returns:
-        Dict mapping content_id (as string) -> image path
-    """
-    content_id_map: Dict[str, str] = {}
-    all_images = set()
-    for images in series_to_images.values():
-        all_images.update(images)
-    
-    # Match uploaded_images to labeled images
-    # This assumes uploaded_images are in the same order as content_ids
-    for idx, uploaded_img in enumerate(uploaded_images):
-        # Normalize and try to match
-        normalized_uploaded = normalize_pairwise_path(uploaded_img)
-        for labeled_img in all_images:
-            if normalize_pairwise_path(labeled_img) == normalized_uploaded:
-                content_id_map[str(idx + 1)] = labeled_img  # content_ids typically start at 1
-                break
-    
-    return content_id_map
-
-
 def compute_retrieval_pr_curve(
     results_by_query: Dict[str, List[dict]],
     series_to_images: Dict[str, Set[str]],
@@ -312,11 +246,11 @@ def compute_retrieval_pr_from_csv(
     anon_map_path: Optional[str] = None,
     signal_type: str = "",
     max_k: int = 100,
-    uploaded_images: Optional[List[str]] = None
+    content_id_to_image: Optional[Dict[str, str]] = None
 ) -> None:
     """
     Compute retrieval Precision-Recall from topk/threshold CSV results.
-    
+
     Args:
         csv_path: Path to CSV with retrieval results
         labels_path: Path to labels JSON
@@ -326,27 +260,16 @@ def compute_retrieval_pr_from_csv(
         anon_map_path: Optional anon ID map
         signal_type: Signal type label for plots
         max_k: Maximum k to evaluate
-        uploaded_images: Optional list of images in upload order (for content_id mapping)
+        content_id_to_image: Optional mapping of content_id -> image path (from upload)
     """
     # Load data
     results_by_query = load_retrieval_results_csv(csv_path, result_type)
     series_to_images = load_labels(labels_path)
     image_to_series = build_image_to_series_map(series_to_images)
     id_to_path = load_anon_id_map(anon_map_path)
-    
-    # Build content_id -> image mapping
-    # This is a workaround - ideally should be tracked during upload
-    if uploaded_images:
-        content_id_to_image = build_content_id_to_image_map_from_labels(
-            series_to_images, uploaded_images
-        )
-    else:
-        # Try to infer from query images and labels
-        # This is less accurate but works if all images are in labels
-        all_images = set()
-        for images in series_to_images.values():
-            all_images.update(images)
-        content_id_to_image = {}  # Empty - will skip queries without mapping
+
+    if content_id_to_image is None:
+        content_id_to_image = {}
     
     # Compute PR curve
     pr_data = compute_retrieval_pr_curve(
@@ -418,8 +341,15 @@ def main():
     parser.add_argument("--anon_map", help="Optional anon ID map JSON")
     parser.add_argument("--signal_type", default="", help="Signal type label for plots")
     parser.add_argument("--max_k", type=int, default=100, help="Maximum k to evaluate")
+    parser.add_argument("--content_id_map", help="Path to content_id -> image_path JSON (from upload)")
     args = parser.parse_args()
-    
+
+    content_id_to_image = {}
+    if args.content_id_map:
+        import json
+        with open(args.content_id_map) as f:
+            content_id_to_image = json.load(f)
+
     compute_retrieval_pr_from_csv(
         args.csv,
         args.labels,
@@ -428,7 +358,8 @@ def main():
         args.result_type,
         args.anon_map,
         args.signal_type,
-        args.max_k
+        args.max_k,
+        content_id_to_image
     )
 
 

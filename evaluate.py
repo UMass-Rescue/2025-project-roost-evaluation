@@ -667,8 +667,7 @@ def calculate_metrics(results_dir):
     from metrics.map import compute_map_from_retrieval_csv
     from metrics.precision_recall import compute_precision_recall_from_pairwise
     from metrics.distance_distribution import compute_distance_distribution
-    from metrics.retrieval_pr import build_content_id_to_image_map_from_labels
-    from metrics.common import validate_series_metadata_exists, load_labels
+    from metrics.common import validate_series_metadata_exists
     
     labels_path = Path(os.getenv(LABELS_PATH_ENV, "resources/labels/images_series_labels.json"))
     image_dir = Path(os.environ.get("IMAGE_INPUT_DIR", str(image_input_dir)))
@@ -714,12 +713,7 @@ def calculate_metrics(results_dir):
             _log_info(f"Loaded content_id mapping ({len(content_id_to_image)} entries)")
         else:
             _log_warning(f"Content ID mapping file not found or empty. MAP calculation may be inaccurate.")
-            # Fallback to old method (likely incorrect)
-            uploaded_images = get_image_files(image_dir)
-            series_to_images = load_labels(str(labels_path))
-            content_id_to_image = build_content_id_to_image_map_from_labels(
-                series_to_images, uploaded_images
-            ) if uploaded_images else {}
+            content_id_to_image = {}
         
         try:
             _log_info(f"Computing MAP@k from {result_type} retrieval results for {SIGNAL_TYPE}...")

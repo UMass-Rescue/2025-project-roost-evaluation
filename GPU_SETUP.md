@@ -6,8 +6,6 @@ Run evaluation with NVIDIA GPU acceleration for faster CLIP embeddings.
 
 **Platform:** Linux with NVIDIA GPU only (macOS not supported - Docker can't access GPU)
 
-**No Docker access?** See [NATIVE_GPU_SETUP.md](NATIVE_GPU_SETUP.md) to run natively without containers.
-
 ---
 
 ## Switch from CPU to GPU

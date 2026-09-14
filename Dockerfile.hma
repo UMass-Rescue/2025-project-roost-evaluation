@@ -1,7 +1,7 @@
 # Dockerfile to build HMA from ThreatExchange repository at a specific commit
 # ThreatExchange commit hash (compatible with hma.patch): aff3f3b8
 
-FROM python:3.13-bullseye as builder
+FROM python:3.11-bullseye as builder
 
 # Accept build argument for commit hash
 ARG THREATEXCHANGE_COMMIT=aff3f3b8
@@ -23,7 +23,7 @@ RUN git clone https://github.com/facebook/ThreatExchange.git . && \
     rm -rf .git /tmp/hma.patch
 
 # Build stage - build HMA from the cloned source
-FROM python:3.13-bullseye
+FROM python:3.11-bullseye
 
 # Ensure Python logs are sent to stdout/stderr immediately without buffering
 ENV PYTHONUNBUFFERED=1
@@ -38,6 +38,11 @@ RUN apt-get update && apt-get install -y \
 
 # Copy the HMA source from the builder
 COPY --from=builder /threatexchange/hasher-matcher-actioner/pyproject.toml ./
+
+# PyTorch: default cpu. GPU: PYTORCH_CUDA=cu128|cu126|cu124|cu118 (match nvidia-smi)
+ARG PYTORCH_CUDA=cpu
+RUN pip install torch torchvision --index-url https://download.pytorch.org/whl/${PYTORCH_CUDA}
+
 RUN pip install .[prod]
 
 # Copy HMA source (needed for threatexchange command and CLIP extension)

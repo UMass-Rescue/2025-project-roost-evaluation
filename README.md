@@ -8,8 +8,11 @@ This project evaluates content matching capabilities using HMA (Hasher-Matcher-A
 
 - Docker and Docker Compose
 - Git
+- (Optional) NVIDIA GPU with nvidia-container-toolkit for GPU acceleration – default is CPU; see [GPU_SETUP.md](GPU_SETUP.md) to enable
 
 ## Quick Start
+
+**Note:** For GPU acceleration setup on Linux with NVIDIA GPU, see [GPU_SETUP.md](GPU_SETUP.md) before proceeding.
 
 ### 1. Create Docker Network
 
@@ -75,7 +78,8 @@ make run-evaluation   # Runs all tests locally
 After running tests with `EVAL_MODE=test`, metrics and graphs are **automatically generated** and saved to:
 ```
 OUTPUT_DIR/evaluation_results/<timestamp>/
-├── pairwise_<signal_type>_compare.json
+├── pairwise_<signal_type>_compare.csv
+├── content_id_to_image_<signal_type>.json
 ├── map_by_series_<signal_type>_results.csv
 ├── precision_recall_<signal_type>_results.csv
 ├── precision_recall_<signal_type>_curve.png
@@ -90,7 +94,7 @@ You can also compute metrics manually:
 ```bash
 python metrics/map.py \
   --labels resources/labels/images_series_labels.json \
-  --pairwise results/evaluation_results/<timestamp>/pairwise_clip_compare.json \
+  --pairwise results/evaluation_results/<timestamp>/pairwise_clip_compare.csv \
   --output_csv results/evaluation_results/<timestamp>/map_by_series.csv
 ```
 
@@ -98,7 +102,7 @@ python metrics/map.py \
 ```bash
 python metrics/precision_recall.py \
   --labels resources/labels/images_series_labels.json \
-  --pairwise results/evaluation_results/<timestamp>/pairwise_clip_compare.json \
+  --pairwise results/evaluation_results/<timestamp>/pairwise_clip_compare.csv \
   --output_csv precision_recall_results.csv \
   --output_plot precision_recall_curve.png
 ```
@@ -107,7 +111,7 @@ python metrics/precision_recall.py \
 ```bash
 python metrics/distance_distribution.py \
   --labels resources/labels/images_series_labels.json \
-  --pairwise results/evaluation_results/<timestamp>/pairwise_clip_compare.json \
+  --pairwise results/evaluation_results/<timestamp>/pairwise_clip_compare.csv \
   --output_plot distance_distribution.png \
   --signal_type clip
 ```
@@ -132,7 +136,7 @@ Calculating MAP metrics...
 ```
 
 Notes:
-- Paths in pairwise JSON generated inside Docker may start with `/build/`; the scripts normalize these automatically.
+- Paths in pairwise CSV generated inside Docker may start with `/build/`; the scripts normalize these automatically.
 - All metrics support `--anon_map` parameter if using anonymized paths.
 
 ## Series Metadata
@@ -258,9 +262,10 @@ With `CLIP_DISABLE_HNSW_INDEX: 'true'` you'll see `CLIPFloatIndex (exact/flat)` 
 ## Results
 
 Test results are saved under `OUTPUT_DIR/evaluation_results/<timestamp>/` (default `./results/evaluation_results/<timestamp>/`):
-- `pairwise_clip_compare.json`
-- `topk_test_results.json`
-- `threshold_test_results.json`
+- `pairwise_<signal_type>_compare.csv`
+- `topk_test_<signal_type>_results.csv`
+- `threshold_test_<signal_type>_results.csv`
+- `content_id_to_image_<signal_type>.json`
 
 ## Troubleshooting
 

@@ -1,5 +1,6 @@
 """Common utilities for metrics computation."""
 import json
+import csv
 from pathlib import Path
 from typing import Dict, List, Set, Tuple, Optional
 
@@ -15,7 +16,7 @@ def normalize_label_path(path_str: str) -> str:
 
 
 def normalize_pairwise_path(path_str: str) -> str:
-    """Normalize pairwise result paths, stripping container mount prefixes."""
+    """Normalize pairwise result paths, stripping container mount prefixes and absolute paths."""
     p = path_str.replace("\\", "/")
     if p.startswith("/build/"):
         p = p[len("/build/"):]
@@ -25,6 +26,11 @@ def normalize_pairwise_path(path_str: str) -> str:
         p = p[2:]
     if p.startswith("/"):
         p = p[1:]
+    # Native runs use absolute paths (e.g. /home/user/project/resources/images/...)
+    # Extract resources/... suffix so labels and pairwise use the same canonical form
+    if "resources/" in p:
+        idx = p.index("resources/")
+        p = p[idx:]
     return p
 
 
@@ -68,9 +74,20 @@ def load_labels(labels_path: str) -> Dict[str, Set[str]]:
 
 def load_pairwise(pairwise_path: str) -> List[dict]:
     """
-    Load pairwise results, skipping entries with missing/invalid distance.
+    Load pairwise results from JSON or CSV, skipping entries with missing/invalid distance.
     Returns list of dicts with 'image1', 'image2', and 'distance' fields.
     """
+    pairwise_file = Path(pairwise_path)
+    
+    # Detect format by extension
+    if pairwise_file.suffix.lower() == '.csv':
+        return _load_pairwise_csv(pairwise_path)
+    else:
+        return _load_pairwise_json(pairwise_path)
+
+
+def _load_pairwise_json(pairwise_path: str) -> List[dict]:
+    """Load pairwise results from JSON format."""
     with open(pairwise_path, "r") as f:
         data = json.load(f)
     if not isinstance(data, list):
@@ -96,6 +113,60 @@ def load_pairwise(pairwise_path: str) -> List[dict]:
             skipped_count += 1
             continue
         normalized_entries.append({"image1": a, "image2": b, "distance": d})
+    
+    if skipped_count > 0:
+        print(
+            f"Warning: Skipped {skipped_count} pairwise entries due to missing/invalid distances. "
+            "This may result in some images having fewer or no neighbors."
+        )
+    return normalized_entries
+
+
+def _load_pairwise_csv(pairwise_path: str) -> List[dict]:
+    """Load pairwise results from CSV format."""
+    normalized_entries: List[dict] = []
+    skipped_count = 0
+    
+    with open(pairwise_path, "r", newline='') as f:
+        reader = csv.DictReader(f)
+        
+        # Validate required columns
+        required_cols = {"image1", "image2", "distance"}
+        if not required_cols.issubset(reader.fieldnames or []):
+            raise ValueError(
+                f"CSV must have columns: {required_cols}. Found: {reader.fieldnames}"
+            )
+        
+        for row_num, row in enumerate(reader, start=2):  # Start at 2 (header is row 1)
+            a = row.get("image1", "").strip()
+            b = row.get("image2", "").strip()
+            distance_str = row.get("distance", "").strip()
+            
+            if not a or not b or not distance_str:
+                skipped_count += 1
+                continue
+            
+            # Handle dict string format like "{'distance': '0.123'}" or "{'distance': 0.123}"
+            if distance_str.startswith("{") and ("'distance'" in distance_str or '"distance"' in distance_str):
+                try:
+                    import ast
+                    distance_dict = ast.literal_eval(distance_str)
+                    if isinstance(distance_dict, dict):
+                        distance_str = str(distance_dict.get("distance", distance_str))
+                except (ValueError, SyntaxError):
+                    # Try to extract manually if ast fails
+                    import re
+                    match = re.search(r"'distance'[\s:]+['\"]?([\d.]+)", distance_str)
+                    if match:
+                        distance_str = match.group(1)
+            
+            try:
+                d = extract_distance(distance_str)
+            except (ValueError, KeyError, TypeError):
+                skipped_count += 1
+                continue
+            
+            normalized_entries.append({"image1": a, "image2": b, "distance": d})
     
     if skipped_count > 0:
         print(

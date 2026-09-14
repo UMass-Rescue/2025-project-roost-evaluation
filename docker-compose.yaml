@@ -1,5 +1,8 @@
 # ThreatExchange commit hash (compatible with hma.patch)
 # Commit: aff3f3b8
+#
+# Default: CPU. For GPU: uncomment deploy below and build with:
+#   PYTORCH_CUDA=cu128 docker compose build --no-cache
 x-postgres-variables: &postgres-variables
   POSTGRES_USER: postgres
   POSTGRES_PASSWORD: postgres
@@ -35,6 +38,7 @@ services:
       dockerfile: Dockerfile.hma
       args:
         THREATEXCHANGE_COMMIT: aff3f3b8
+        PYTORCH_CUDA: ${PYTORCH_CUDA:-cpu}  # GPU: PYTORCH_CUDA=cu128
     restart: no
     environment:
       <<: *omm-variables
@@ -51,6 +55,7 @@ services:
       dockerfile: Dockerfile.hma
       args:
         THREATEXCHANGE_COMMIT: aff3f3b8
+        PYTORCH_CUDA: ${PYTORCH_CUDA:-cpu}  # GPU: PYTORCH_CUDA=cu128 (match nvidia-smi)
     restart: unless-stopped
     ports:
       - "5005:5100"
@@ -65,6 +70,14 @@ services:
         condition: service_completed_successfully
     networks:
       - shared-hma-network
+    # GPU: uncomment deploy below (Linux + nvidia-container-toolkit)
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
 
   evaluation:
     build: .

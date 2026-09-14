@@ -4,7 +4,11 @@ import csv
 from pathlib import Path
 from typing import Dict, List, Set, Tuple, Optional
 
-from metrics.common import load_and_validate_data, ensure_output_dir, normalize_pairwise_path
+from metrics.common import (
+    load_and_validate_data, ensure_output_dir, normalize_pairwise_path,
+    load_labels, load_anon_id_map, build_image_to_series_map
+)
+from metrics.retrieval_pr import load_retrieval_results_csv
 
 
 def build_rankings(
@@ -185,6 +189,68 @@ def compute_map_from_pairwise(
     max_k = max(len(v) for v in series_to_images.values())
     series_to_map = compute_series_map(series_to_images, rankings, max_k)
     
+    write_series_map_csv(series_to_map, output_csv)
+
+
+def compute_map_from_retrieval_csv(
+    csv_path: str,
+    labels_path: str,
+    output_csv: str,
+    result_type: str = "topk",
+    anon_map_path: Optional[str] = None,
+    content_id_to_image: Optional[Dict[str, str]] = None
+) -> None:
+    """
+    Compute mAP@k from retrieval results (topk/threshold CSV).
+    
+    This measures actual index retrieval performance, not just distance quality.
+    
+    Args:
+        csv_path: Path to retrieval results CSV (topk or threshold test output)
+        labels_path: Path to labels JSON
+        output_csv: Output CSV path for MAP results
+        result_type: "topk" or "threshold"
+        anon_map_path: Optional anon ID map
+        content_id_to_image: Mapping from content_id to image path
+    """
+    # Load data
+    series_to_images = load_labels(labels_path)
+    image_to_series = build_image_to_series_map(series_to_images)
+    id_to_path = load_anon_id_map(anon_map_path)
+    
+    if not content_id_to_image:
+        content_id_to_image = {}
+    
+    # Load retrieval results (reuse existing function)
+    results_by_query = load_retrieval_results_csv(csv_path, result_type)
+    
+    # Build rankings from retrieval results
+    rankings: Dict[str, List[Tuple[str, float]]] = {}
+    
+    for query_image, matches in results_by_query.items():
+        query_src = id_to_path.get(query_image, query_image) if id_to_path else query_image
+        query_normalized = normalize_pairwise_path(query_src)
+        
+        if query_normalized not in image_to_series:
+            continue
+        
+        # Map content_ids to image paths
+        ranked_neighbors: List[Tuple[str, float]] = []
+        for match in matches:
+            content_id = str(match["bank_content_id"])
+            if content_id in content_id_to_image:
+                matched_path = content_id_to_image[content_id]
+                matched_normalized = normalize_pairwise_path(matched_path)
+                ranked_neighbors.append((matched_normalized, match["distance"]))
+        
+        if ranked_neighbors:
+            rankings[query_normalized] = ranked_neighbors
+    
+    # Compute MAP@k for each series
+    max_k = max(len(v) for v in series_to_images.values())
+    series_to_map = compute_series_map(series_to_images, rankings, max_k)
+    
+    # Write results
     write_series_map_csv(series_to_map, output_csv)
 
 

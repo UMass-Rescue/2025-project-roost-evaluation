@@ -1,6 +1,10 @@
 # ThreatExchange commit hash (compatible with hma.patch)
 # Commit: aff3f3b8
 #
+# Sentinel API (grooming classifier service) commit
+# Repo: https://github.com/UMass-Rescue/sentinel-api
+# Commit: 29c84fb9651f48d4e347fdc8e99cfcb7e7914ec7
+#
 # Default: CPU. For GPU: uncomment deploy below and build with:
 #   PYTORCH_CUDA=cu128 docker compose build --no-cache
 x-postgres-variables: &postgres-variables
@@ -79,12 +83,23 @@ services:
     #           count: all
     #           capabilities: [gpu]
 
+  sentinel-app:
+    build:
+      context: https://github.com/UMass-Rescue/sentinel-api.git#29c84fb9651f48d4e347fdc8e99cfcb7e7914ec7
+    restart: unless-stopped
+    ports:
+      - "8001:8000"
+    networks:
+      - shared-hma-network
+
   evaluation:
     build: .
     #    command: tail -f /dev/null
     environment:
       - HMA_HOST=hma-app
       - HMA_PORT=5100
+      - SENTINEL_HOST=sentinel-app
+      - SENTINEL_PORT=8000
       - POSTGRES_HOST=hma-postgresql
       - POSTGRES_PORT=5432
       - POSTGRES_USER=postgres
@@ -97,6 +112,7 @@ services:
     depends_on:
       - hma-app
       - hma-postgresql
+      - sentinel-app
 
 volumes:
   hma-postgres-data:

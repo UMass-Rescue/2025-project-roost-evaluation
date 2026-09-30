@@ -235,6 +235,27 @@ docker compose logs hma-app 2>&1 | grep "CLIP_MATCHER_INDEX_TYPE" | head -1
 
 With `CLIP_DISABLE_HNSW_INDEX: 'true'` you'll see `CLIPFloatIndex (exact/flat)` or `CLIPFloatVectorIndex (exact/flat)` instead.
 
+## Sentinel Configuration
+
+Sentinel is a grooming classifier, served as its own HTTP API from a separate,
+standalone repo: [UMass-Rescue/sentinel-api](https://github.com/UMass-Rescue/sentinel-api).
+Its code is **not** vendored in this repo — `docker-compose.yaml` builds the
+`sentinel-app` service directly from that repo via a pinned git-context build,
+the same way `hma-app` is built from a pinned `THREATEXCHANGE_COMMIT`.
+
+- **Repository**: https://github.com/UMass-Rescue/sentinel-api
+- **Commit**: pinned in `docker-compose.yaml`'s `sentinel-app.build.context`
+  (currently `29c84fb9651f48d4e347fdc8e99cfcb7e7914ec7`)
+- **Port**: 8001 (host) → 8000 (container)
+- **Network**: `shared-hma-network`
+- **Env vars for the `evaluation` service**: `SENTINEL_HOST=sentinel-app`, `SENTINEL_PORT=8000`
+
+To bump the pinned commit, update the ref after the `#` in `sentinel-app.build.context`
+in `docker-compose.yaml` and rebuild with `docker compose build --no-cache sentinel-app`.
+
+See `sentinel/README.md` for the planned layout of Sentinel-specific evaluation code
+(metrics, tests, labeled resources) in this repo.
+
 ## Environment Variables
 
 ### Test Configuration

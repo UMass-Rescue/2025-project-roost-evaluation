@@ -1,0 +1,7 @@
+relative_path,split,generation_label,human_classification,risk,notes
+conversations/synth_chat_snippets_1l/grooming/fixture_g1.txt,1l,grooming,grooming,med,
+conversations/synth_chat_snippets_1l/grooming/fixture_g2.txt,1l,grooming,grooming,low,
+conversations/synth_chat_snippets_1l/innocuous/fixture_i1.txt,1l,innocuous,,,
+conversations/synth_chat_snippets_1l/innocuous/fixture_i2.txt,1l,innocuous,,,
+conversations/synth_chat_snippets_10l/conversation_001.txt,10l,grooming,definitely grooming,,
+conversations/synth_chat_snippets_10l/conversation_002.txt,10l,innocuous,definitely innocuous,,

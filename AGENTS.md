@@ -61,6 +61,10 @@ full detail — don't duplicate that detail here.
 - PR descriptions should reflect only what's actually in the diff/commits,
   not leftover context from earlier iterations.
 - Scope each PR to one concern.
+- Never push directly to a repo's main/default branch — this applies to this
+  repo and any other repo touched while working here (e.g. a dataset repo
+  cloned under `sentinel/dataset/`). Always push to a feature branch and open
+  a PR, unless the user explicitly asks for a direct push to main.
 
 ## Further reading
 

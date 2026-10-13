@@ -15,11 +15,13 @@ from __future__ import annotations
 
 import csv
 import os
+import shutil
 from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Optional, Tuple
 
 MANIFEST_FILENAME = "labeled_conversations.csv"
+SENTINEL_DATA_DIR_ENV = "SENTINEL_DATA_DIR"
 
 
 class DatasetNotFoundError(RuntimeError):
@@ -110,6 +112,65 @@ def load_1l_paths(dataset_root: Optional[Path] = None) -> Tuple[List[Path], List
     grooming = [root / r["relative_path"] for r in rows if r["generation_label"] == "grooming"]
     innocuous = [root / r["relative_path"] for r in rows if r["generation_label"] == "innocuous"]
     return grooming, innocuous
+
+
+def _data_dir(data_dir: Optional[Path] = None) -> Path:
+    """Resolve the shared staging directory used for bank creation.
+
+    This is a Docker volume mounted at the same path into both this
+    container and sentinel-app -- see the root README.md's 'Sentinel
+    Configuration' section -- so paths written here resolve identically on
+    both sides. Required because Sentinel's POST /banks/create takes
+    filesystem folder paths, not uploaded content.
+    """
+    if data_dir is not None:
+        path = data_dir
+    else:
+        override = os.environ.get(SENTINEL_DATA_DIR_ENV)
+        if not override:
+            raise DatasetNotFoundError(
+                f"{SENTINEL_DATA_DIR_ENV} is not set. This must point at the "
+                f"shared volume mounted into both this container and "
+                f"sentinel-app -- see the root README.md's 'Sentinel "
+                f"Configuration' section."
+            )
+        path = Path(override)
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def _restage_folder(folder: Path, source_paths: List[Path]) -> None:
+    """Replace folder's contents with copies of source_paths."""
+    if folder.exists():
+        shutil.rmtree(folder)
+    folder.mkdir(parents=True)
+    for source_path in source_paths:
+        shutil.copy2(source_path, folder / source_path.name)
+
+
+def stage_1l_banks(
+    data_dir: Optional[Path] = None, dataset_root: Optional[Path] = None
+) -> Tuple[Path, Path]:
+    """Copy the 1-line split into positive/negative folders for bank creation.
+
+    Materializes <data_dir>/texts/positive (confirmed-grooming files) and
+    <data_dir>/texts/negative (all innocuous files) by copying from the
+    dataset, clearing any previous contents first. data_dir defaults to the
+    shared staging volume (SENTINEL_DATA_DIR).
+
+    Returns (positive_dir, negative_dir). Pass these same paths straight
+    into a CreateBanksRequest's positive_folder/negative_folder -- they
+    resolve identically inside sentinel-app, which shares the same volume.
+    """
+    root = _data_dir(data_dir)
+    positive_dir = root / "texts" / "positive"
+    negative_dir = root / "texts" / "negative"
+
+    grooming_paths, innocuous_paths = load_1l_paths(dataset_root=dataset_root)
+    _restage_folder(positive_dir, grooming_paths)
+    _restage_folder(negative_dir, innocuous_paths)
+
+    return positive_dir, negative_dir
 
 
 def load_10l_test_set(dataset_root: Optional[Path] = None) -> List[Conversation]:

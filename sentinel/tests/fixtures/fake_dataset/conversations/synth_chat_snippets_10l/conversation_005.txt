@@ -1,0 +1,2 @@
+FIXTURE_SPEAKER_A: too-difficult-to-tell fixture placeholder line 1
+FIXTURE_SPEAKER_B: too-difficult-to-tell fixture placeholder line 2

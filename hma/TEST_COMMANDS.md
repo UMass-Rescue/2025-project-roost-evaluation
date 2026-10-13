@@ -1,6 +1,6 @@
 # HMA Test Commands Reference
 
-Run `docker compose up --build -d` first (see root [TEST_COMMANDS.md](../TEST_COMMANDS.md)'s Setup section).
+Run `docker compose up --build -d` first (see root [README.md](../README.md)'s Quick Start section).
 
 ## Run Tests
 

@@ -44,7 +44,7 @@ This builds and starts, for both systems:
 
 ### 3. Run an Evaluation
 
-- **HMA**: see [hma/README.md](hma/README.md) and [TEST_COMMANDS.md](TEST_COMMANDS.md)
+- **HMA**: see [hma/README.md](hma/README.md) and [hma/TEST_COMMANDS.md](hma/TEST_COMMANDS.md)
   for test commands, metrics, and configuration.
 - **Sentinel**: see [sentinel/README.md](sentinel/README.md) for test commands,
   dataset setup, and configuration.
@@ -65,8 +65,25 @@ docker compose ps
 
 # View evaluation service logs
 docker compose logs evaluation
+
+# Check for errors across all services
+docker compose logs | grep -i error
 ```
 
 For system-specific troubleshooting (service health checks, database
 connectivity, etc.), see [hma/README.md](hma/README.md#troubleshooting) or
 [sentinel/README.md](sentinel/README.md).
+
+## Cleanup
+
+```bash
+# Stop services
+docker compose down
+
+# Remove volumes (fresh start)
+docker compose down -v
+
+# Rebuild
+docker compose build --no-cache
+docker compose up --build -d
+```

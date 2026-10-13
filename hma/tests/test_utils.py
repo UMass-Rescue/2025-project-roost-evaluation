@@ -5,8 +5,8 @@ import binascii
 import numpy as np
 from pathlib import Path
 from datetime import datetime
-from series_labels_utils import get_image_files as _get_image_files
-from tests.path_id_store import PathIdStore
+from hma.series_labels_utils import get_image_files as _get_image_files
+from hma.tests.path_id_store import PathIdStore
 
 ANON_ENV_FLAG = "DEANONYMIZE_IMAGE_PATHS"
 

@@ -10,7 +10,7 @@ try:
 except ImportError:
     MATPLOTLIB_AVAILABLE = False
 
-from metrics.common import load_and_validate_data, ensure_output_dir, classify_pairwise_by_series
+from hma.metrics.common import load_and_validate_data, ensure_output_dir, classify_pairwise_by_series
 
 
 def classify_pairwise_distances(

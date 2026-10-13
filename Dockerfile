@@ -10,6 +10,7 @@ COPY requirements.txt /build/
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY evaluate.py /build/
+COPY series_labels_utils.py /build/
 COPY tests/ /build/tests/
 COPY metrics/ /build/metrics/
 COPY resources/images /build/resources/images

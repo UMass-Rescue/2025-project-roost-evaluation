@@ -95,7 +95,7 @@ services:
     volumes:
       # Shared with `evaluation` so bank-creation requests can reference
       # folder paths that resolve inside this container too -- see the
-      # root README.md's "Sentinel Configuration" section.
+      # sentinel/README.md's "Service wiring" section.
       - sentinel-data:/data
     networks:
       - shared-hma-network

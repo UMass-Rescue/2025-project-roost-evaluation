@@ -134,10 +134,10 @@ def _data_dir(data_dir: Optional[Path] = None) -> Path:
     """Resolve the shared staging directory used for bank creation.
 
     This is a Docker volume mounted at the same path into both this
-    container and sentinel-app -- see the root README.md's 'Sentinel
-    Configuration' section -- so paths written here resolve identically on
-    both sides. Required because Sentinel's POST /banks/create takes
-    filesystem folder paths, not uploaded content.
+    container and sentinel-app -- see sentinel/README.md's 'Service wiring'
+    section -- so paths written here resolve identically on both sides.
+    Required because Sentinel's POST /banks/create takes filesystem folder
+    paths, not uploaded content.
     """
     if data_dir is not None:
         path = data_dir
@@ -147,8 +147,8 @@ def _data_dir(data_dir: Optional[Path] = None) -> Path:
             raise DatasetNotFoundError(
                 f"{SENTINEL_DATA_DIR_ENV} is not set. This must point at the "
                 f"shared volume mounted into both this container and "
-                f"sentinel-app -- see the root README.md's 'Sentinel "
-                f"Configuration' section."
+                f"sentinel-app -- see sentinel/README.md's 'Service wiring' "
+                f"section."
             )
         path = Path(override)
     path.mkdir(parents=True, exist_ok=True)

@@ -78,9 +78,8 @@ docker compose run --rm evaluation bash -c \
 
 - `SENTINEL_DATASET_DIR` — where the dataset lives (default: auto-discovered
   under `sentinel/dataset/`)
-- `SENTINEL_DATA_DIR` — the shared bank-creation staging volume (see root
-  README's "Sentinel Configuration"; defaults to `/data` in the `evaluation`
-  container)
+- `SENTINEL_DATA_DIR` — the shared bank-creation staging volume (see "Service
+  wiring" above; defaults to `/data` in the `evaluation` container)
 - `SENTINEL_CERTAINTY_THRESHOLD` — `lenient` (default) or `strict`; how the
   10-line test set's 5-point human-review scale collapses to a binary
   ground truth

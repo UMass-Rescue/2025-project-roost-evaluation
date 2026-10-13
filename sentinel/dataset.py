@@ -22,6 +22,22 @@ from typing import List, Optional, Tuple
 
 MANIFEST_FILENAME = "labeled_conversations.csv"
 SENTINEL_DATA_DIR_ENV = "SENTINEL_DATA_DIR"
+SENTINEL_CERTAINTY_THRESHOLD_ENV = "SENTINEL_CERTAINTY_THRESHOLD"
+DEFAULT_CERTAINTY_THRESHOLD = "lenient"
+
+# Collapses the 5-point human_classification scale into a binary ground
+# truth label. "too difficult to tell" is always excluded, regardless of
+# threshold.
+_CERTAINTY_LEVELS = {
+    "lenient": {
+        "grooming": {"definitely grooming", "probably grooming"},
+        "innocuous": {"definitely innocuous", "probably innocuous"},
+    },
+    "strict": {
+        "grooming": {"definitely grooming"},
+        "innocuous": {"definitely innocuous"},
+    },
+}
 
 
 class DatasetNotFoundError(RuntimeError):
@@ -187,3 +203,58 @@ def load_10l_test_set(dataset_root: Optional[Path] = None) -> List[Conversation]
         )
         for r in rows
     ]
+
+
+def ground_truth_label(
+    conversation: Conversation, certainty_threshold: Optional[str] = None
+) -> Optional[str]:
+    """Collapse a Conversation's human_classification into a ground-truth label.
+
+    Returns "grooming", "innocuous", or None if this conversation should be
+    excluded from evaluation at the given certainty threshold (always true
+    for "too difficult to tell"; also true for "probably X" rows under
+    "strict").
+
+    Based on human_classification -- the actual human review -- not
+    generation_label, since the two disagree often enough in this dataset
+    that generation_label can't be treated as ground truth here.
+
+    certainty_threshold defaults to the SENTINEL_CERTAINTY_THRESHOLD env
+    var, falling back to "lenient" ("definitely X"/"probably X" both
+    count). Pass "strict" to keep only "definitely X" rows.
+    """
+    threshold = certainty_threshold or os.environ.get(
+        SENTINEL_CERTAINTY_THRESHOLD_ENV, DEFAULT_CERTAINTY_THRESHOLD
+    )
+    try:
+        levels = _CERTAINTY_LEVELS[threshold]
+    except KeyError:
+        raise ValueError(
+            f"Unknown certainty threshold {threshold!r}. Expected one of: "
+            f"{sorted(_CERTAINTY_LEVELS)}."
+        )
+
+    classification = conversation.human_classification.strip().lower()
+    if classification in levels["grooming"]:
+        return "grooming"
+    if classification in levels["innocuous"]:
+        return "innocuous"
+    return None
+
+
+def load_10l_eval_set(
+    dataset_root: Optional[Path] = None, certainty_threshold: Optional[str] = None
+) -> List[Tuple[Conversation, str]]:
+    """Load the 10-line test set paired with ground-truth labels.
+
+    Convenience wrapper around load_10l_test_set() + ground_truth_label():
+    excludes conversations with no clear ground truth at the given
+    certainty threshold.
+    """
+    conversations = load_10l_test_set(dataset_root=dataset_root)
+    paired = []
+    for conversation in conversations:
+        label = ground_truth_label(conversation, certainty_threshold=certainty_threshold)
+        if label is not None:
+            paired.append((conversation, label))
+    return paired

@@ -1,9 +1,35 @@
 # Sentinel (grooming classifier) evaluation
 
-Sentinel's service code lives in its own repo, [UMass-Rescue/sentinel-api](https://github.com/UMass-Rescue/sentinel-api),
-and isn't vendored here. `docker-compose.yaml` builds the `sentinel-app` service
-directly from a pinned commit on that repo — see the root `README.md`'s
-"Sentinel Configuration" section for details.
+Sentinel is a grooming classifier, served as its own HTTP API from a separate,
+standalone repo: [UMass-Rescue/sentinel-api](https://github.com/UMass-Rescue/sentinel-api).
+Its code is **not** vendored in this repo — `docker-compose.yaml` builds the
+`sentinel-app` service directly from that repo via a pinned git-context build,
+the same way `hma-app` is built from a pinned `THREATEXCHANGE_COMMIT`.
+
+Make sure you've completed the root [README.md](../README.md)'s "Quick Start"
+(network + `docker compose up --build -d`) before following this doc.
+
+## Service wiring
+
+- **Repository**: https://github.com/UMass-Rescue/sentinel-api
+- **Commit**: pinned in `docker-compose.yaml`'s `sentinel-app.build.context`
+  (currently `29c84fb9651f48d4e347fdc8e99cfcb7e7914ec7`)
+- **Port**: 8001 (host) → 8000 (container)
+- **Network**: `shared-hma-network`
+- **Env vars for the `evaluation` service**: `SENTINEL_HOST=sentinel-app`,
+  `SENTINEL_PORT=8000`, `SENTINEL_DATA_DIR=/data`
+- **Shared volume**: `sentinel-data` is mounted at `/data` in both `sentinel-app`
+  and `evaluation`. Sentinel's `POST /banks/create` takes filesystem folder
+  paths rather than uploaded files, so bank-creation inputs/outputs have to live
+  somewhere both containers can read/write at the same path.
+
+To bump the pinned commit, update the ref after the `#` in `sentinel-app.build.context`
+in `docker-compose.yaml` and rebuild with `docker compose build --no-cache sentinel-app`.
+
+**Verify sentinel-app is reachable:**
+```bash
+docker compose run --rm evaluation curl -s http://sentinel-app:8000/health
+```
 
 ## Code layout
 

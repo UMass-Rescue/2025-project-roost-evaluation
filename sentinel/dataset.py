@@ -165,7 +165,9 @@ def _restage_folder(folder: Path, source_paths: List[Path]) -> None:
 
 
 def stage_1l_banks(
-    data_dir: Optional[Path] = None, dataset_root: Optional[Path] = None
+    data_dir: Optional[Path] = None,
+    dataset_root: Optional[Path] = None,
+    limit: Optional[int] = None,
 ) -> Tuple[Path, Path]:
     """Copy the 1-line split into positive/negative folders for bank creation.
 
@@ -173,6 +175,9 @@ def stage_1l_banks(
     <data_dir>/texts/negative (all innocuous files) by copying from the
     dataset, clearing any previous contents first. data_dir defaults to the
     shared staging volume (SENTINEL_DATA_DIR).
+
+    limit, if given, caps how many files are copied into each folder (e.g.
+    for a fast smoke test against a tiny subset instead of the full split).
 
     Returns (positive_dir, negative_dir). Pass these same paths straight
     into a CreateBanksRequest's positive_folder/negative_folder -- they
@@ -183,6 +188,9 @@ def stage_1l_banks(
     negative_dir = root / "texts" / "negative"
 
     grooming_paths, innocuous_paths = load_1l_paths(dataset_root=dataset_root)
+    if limit is not None:
+        grooming_paths = grooming_paths[:limit]
+        innocuous_paths = innocuous_paths[:limit]
     _restage_folder(positive_dir, grooming_paths)
     _restage_folder(negative_dir, innocuous_paths)
 

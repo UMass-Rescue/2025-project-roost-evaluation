@@ -13,8 +13,15 @@ This repo evaluates two independent systems against ground-truth datasets:
 
 ## Repo layout
 
-- Root-level `evaluate.py`, `metrics/`, `resources/`, `tests/` are **HMA-specific**.
+- `hma/` holds everything HMA-specific: `evaluate.py`, `metrics/`,
+  `resources/`, `tests/`, `series_labels_utils.py`, `omm_config.py`,
+  `Dockerfile.hma`, plus its own `GPU_SETUP.md` and
+  `EVALUATION_DESCRIPTION.md`.
 - `sentinel/` holds the equivalent shape for the **Sentinel** domain.
+- Root-level files (`README.md`, `TEST_COMMANDS.md`, `docker-compose.yaml`,
+  `Dockerfile`, `requirements.txt`, `Makefile`) are shared across both
+  domains — `Dockerfile`/`requirements.txt` build the single `evaluation`
+  image both `hma/evaluate.py` and `sentinel/evaluate.py` run in.
 
 These stay separate by design — different data types, different metrics
 (retrieval/distance metrics vs. classification metrics). Don't merge them
@@ -31,8 +38,8 @@ make smoke-test       # local equivalent, against localhost
 make run-evaluation    # local equivalent, full suite
 ```
 
-See `TEST_COMMANDS.md`, `EVALUATION_DESCRIPTION.md`, and `GPU_SETUP.md` for
-full detail — don't duplicate that detail here.
+See `TEST_COMMANDS.md`, `hma/EVALUATION_DESCRIPTION.md`, and
+`hma/GPU_SETUP.md` for full detail — don't duplicate that detail here.
 
 ## Code conventions
 
@@ -65,7 +72,7 @@ full detail — don't duplicate that detail here.
 ## Further reading
 
 - `README.md` — full setup, configuration, and HMA/Sentinel service details
-- `EVALUATION_DESCRIPTION.md` — what each test suite actually measures
+- `hma/EVALUATION_DESCRIPTION.md` — what each test suite actually measures
 - `TEST_COMMANDS.md` — exhaustive command reference
-- `GPU_SETUP.md` — GPU acceleration setup
+- `hma/GPU_SETUP.md` — GPU acceleration setup
 - `sentinel/README.md` — Sentinel service wiring and evaluation code layout

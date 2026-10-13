@@ -8,11 +8,11 @@ This project evaluates content matching capabilities using HMA (Hasher-Matcher-A
 
 - Docker and Docker Compose
 - Git
-- (Optional) NVIDIA GPU with nvidia-container-toolkit for GPU acceleration – default is CPU; see [GPU_SETUP.md](GPU_SETUP.md) to enable
+- (Optional) NVIDIA GPU with nvidia-container-toolkit for GPU acceleration – default is CPU; see [hma/GPU_SETUP.md](hma/GPU_SETUP.md) to enable
 
 ## Quick Start
 
-**Note:** For GPU acceleration setup on Linux with NVIDIA GPU, see [GPU_SETUP.md](GPU_SETUP.md) before proceeding.
+**Note:** For GPU acceleration setup on Linux with NVIDIA GPU, see [hma/GPU_SETUP.md](hma/GPU_SETUP.md) before proceeding.
 
 ### 1. Create Docker Network
 
@@ -40,13 +40,13 @@ To change the ThreatExchange commit: set build-time `THREATEXCHANGE_COMMIT` (in 
 ```bash
 docker compose run --rm -e BANK_NAME=SMOKE_TEST evaluation
 ```
-The smoke test cleans the database, creates a bank, uploads all images from `resources/images/`, and tests matching.
+The smoke test cleans the database, creates a bank, uploads all images from `hma/resources/images/`, and tests matching.
 
 **All tests (uses clip_float by default):**
 ```bash
 docker compose run --rm -e EVAL_MODE=test evaluation
 ```
-Tests clean the database, create a bank, upload all images from `resources/images/`, and then run all test suites (pairwise, topk, threshold).
+Tests clean the database, create a bank, upload all images from `hma/resources/images/`, and then run all test suites (pairwise, topk, threshold).
 
 **Test with a different signal type:**
 ```bash
@@ -92,16 +92,16 @@ You can also compute metrics manually:
 
 **mAP (Mean Average Precision):**
 ```bash
-python metrics/map.py \
-  --labels resources/labels/images_series_labels.json \
+PYTHONPATH=. python hma/metrics/map.py \
+  --labels hma/resources/labels/images_series_labels.json \
   --pairwise results/evaluation_results/<timestamp>/pairwise_clip_compare.csv \
   --output_csv results/evaluation_results/<timestamp>/map_by_series.csv
 ```
 
 **Classification Precision-Recall (threshold sweep):**
 ```bash
-python metrics/precision_recall.py \
-  --labels resources/labels/images_series_labels.json \
+PYTHONPATH=. python hma/metrics/precision_recall.py \
+  --labels hma/resources/labels/images_series_labels.json \
   --pairwise results/evaluation_results/<timestamp>/pairwise_clip_compare.csv \
   --output_csv precision_recall_results.csv \
   --output_plot precision_recall_curve.png
@@ -109,8 +109,8 @@ python metrics/precision_recall.py \
 
 **Distance Distribution Histograms:**
 ```bash
-python metrics/distance_distribution.py \
-  --labels resources/labels/images_series_labels.json \
+PYTHONPATH=. python hma/metrics/distance_distribution.py \
+  --labels hma/resources/labels/images_series_labels.json \
   --pairwise results/evaluation_results/<timestamp>/pairwise_clip_compare.csv \
   --output_plot distance_distribution.png \
   --signal_type clip
@@ -148,13 +148,13 @@ A **series** is a group of related images that should be recognized as similar b
 - The same scene with transformations (rotations, flips)
 - The same image with different filters applied
 
-Series are defined in `resources/labels/images_series_labels.json`:
+Series are defined in `hma/resources/labels/images_series_labels.json`:
 
 ```json
 {
   "series_name": [
-    "./resources/images/image1.jpg",
-    "./resources/images/image2.jpg"
+    "./hma/resources/images/image1.jpg",
+    "./hma/resources/images/image2.jpg"
   ]
 }
 ```
@@ -189,14 +189,14 @@ All test runs create detailed logs in `OUTPUT_DIR/test_run_logs/` (default `./re
 ## HMA Configuration
 
 - **Repository**: https://github.com/facebook/ThreatExchange
-- **Commit**: build-time `THREATEXCHANGE_COMMIT` (default in `Dockerfile.hma`, override in `docker-compose.yaml`).
+- **Commit**: build-time `THREATEXCHANGE_COMMIT` (default in `hma/Dockerfile.hma`, override in `docker-compose.yaml`).
 - **Port**: 5005 (host) → 5100 (container)
 - **Network**: `shared-hma-network`
-- **Config**: `omm_config.py` (includes CLIP extension)
+- **Config**: `hma/omm_config.py` (includes CLIP extension)
 
 ### Signal Types Configuration
 
-Signal types are configured in `omm_config.py`. This evaluation uses **CLIPFloatSignal** by default.
+Signal types are configured in `hma/omm_config.py`. This evaluation uses **CLIPFloatSignal** by default.
 
 **Available signals:**
 - **HMA built-in:**
@@ -206,7 +206,7 @@ Signal types are configured in `omm_config.py`. This evaluation uses **CLIPFloat
   - `CLIPSignal`: Integer-based CLIP embeddings (0-100 range)
   - `CLIPFloatSignal`: Float-based CLIP embeddings (0.0-1.0 range) - **default**
 
-To enable additional signals, edit `omm_config.py` and uncomment the desired signal types in the `signal_types` list.
+To enable additional signals, edit `hma/omm_config.py` and uncomment the desired signal types in the `signal_types` list.
 
 ### CLIP Index Configuration
 
@@ -312,4 +312,4 @@ docker compose exec hma-postgresql psql -U postgres -d media_match -c "\dt"
 
 ## Description of the tests
 
-Refer to [EVALUATION_DESCRIPTION.md](EVALUATION_DESCRIPTION.md) for an overview of the tests.
+Refer to [hma/EVALUATION_DESCRIPTION.md](hma/EVALUATION_DESCRIPTION.md) for an overview of the tests.

@@ -12,7 +12,7 @@ RUN apt-get update && apt-get install -y git patch && rm -rf /var/lib/apt/lists/
 WORKDIR /threatexchange
 
 # Copy patch file
-COPY resources/patches/hma.patch /tmp/hma.patch
+COPY hma/resources/patches/hma.patch /tmp/hma.patch
 
 # Clone and checkout the specific commit, then apply patch
 RUN git clone https://github.com/facebook/ThreatExchange.git . && \
@@ -59,7 +59,7 @@ RUN git clone -b main https://github.com/UMass-Rescue/tx-extension-clip.git /app
 COPY --from=builder /threatexchange/hasher-matcher-actioner/reference_omm_configs/ /reference_configs
 
 # Copy custom OMM config with CLIP support
-COPY omm_config.py /reference_configs/development_omm_config.py
+COPY hma/omm_config.py /reference_configs/development_omm_config.py
 
 EXPOSE 5100
 CMD ["gunicorn", "--bind", "0.0.0.0:5100", "--timeout", "1200", "--workers", "1", "--error-logfile", "-", "--capture-output", "--log-level", "info", "OpenMediaMatch.app:create_app()"]

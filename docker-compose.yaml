@@ -39,7 +39,7 @@ services:
   hma-migrations:
     build:
       context: .
-      dockerfile: Dockerfile.hma
+      dockerfile: hma/Dockerfile.hma
       args:
         THREATEXCHANGE_COMMIT: aff3f3b8
         PYTORCH_CUDA: ${PYTORCH_CUDA:-cpu}  # GPU: PYTORCH_CUDA=cu128
@@ -56,7 +56,7 @@ services:
   hma-app:
     build:
       context: .
-      dockerfile: Dockerfile.hma
+      dockerfile: hma/Dockerfile.hma
       args:
         THREATEXCHANGE_COMMIT: aff3f3b8
         PYTORCH_CUDA: ${PYTORCH_CUDA:-cpu}  # GPU: PYTORCH_CUDA=cu128 (match nvidia-smi)

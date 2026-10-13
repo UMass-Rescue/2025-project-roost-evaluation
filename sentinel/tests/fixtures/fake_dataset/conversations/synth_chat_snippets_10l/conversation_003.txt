@@ -1,0 +1,2 @@
+FIXTURE_SPEAKER_A: probably-grooming fixture placeholder line 1
+FIXTURE_SPEAKER_B: probably-grooming fixture placeholder line 2

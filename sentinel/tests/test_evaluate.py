@@ -6,6 +6,7 @@ is exercised against a stub evaluator. The live end-to-end path (actually
 calling a running sentinel-app) is verified manually, not in this suite.
 """
 
+import importlib
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -126,7 +127,7 @@ class _StubEvaluator:
         self.score_value = score
         self.calls = []
 
-    def score(self, texts):
+    def score(self, texts, top_k=None, min_score_to_consider=None):
         self.calls.append(texts)
         return {"rare_class_affinity_score": self.score_value, "observation_scores": {}, "num_observations": len(texts)}
 
@@ -155,3 +156,50 @@ def test_score_conversations_skips_empty_conversations(tmp_path):
 
     assert labeled_scores == [(0.5, "innocuous")]
     assert len(evaluator.calls) == 1
+
+
+def _reload_evaluate_module():
+    """sentinel.evaluate reads SENTINEL_SCORE_TOP_K/MIN_SCORE_TO_CONSIDER at
+    import time, so env var changes need a reload to take effect."""
+    import sentinel.evaluate as evaluate_module
+
+    return importlib.reload(evaluate_module)
+
+
+@pytest.fixture(autouse=True)
+def _restore_evaluate_module_after_reload_tests(monkeypatch):
+    """Reloading sentinel.evaluate mutates shared module-level globals
+    (SCORE_TOP_K, MIN_SCORE_TO_CONSIDER). Reload it back to a clean,
+    env-unset state after every test in this file so state never leaks
+    across tests regardless of run order."""
+    yield
+    monkeypatch.delenv("SENTINEL_SCORE_TOP_K", raising=False)
+    monkeypatch.delenv("SENTINEL_MIN_SCORE_TO_CONSIDER", raising=False)
+    _reload_evaluate_module()
+
+
+def test_score_params_unset_by_default(monkeypatch):
+    monkeypatch.delenv("SENTINEL_SCORE_TOP_K", raising=False)
+    monkeypatch.delenv("SENTINEL_MIN_SCORE_TO_CONSIDER", raising=False)
+    module = _reload_evaluate_module()
+
+    assert module.SCORE_TOP_K is None
+    assert module.MIN_SCORE_TO_CONSIDER is None
+
+
+def test_score_params_read_from_env_vars(monkeypatch):
+    monkeypatch.setenv("SENTINEL_SCORE_TOP_K", "10")
+    monkeypatch.setenv("SENTINEL_MIN_SCORE_TO_CONSIDER", "0.05")
+    module = _reload_evaluate_module()
+
+    assert module.SCORE_TOP_K == 10
+    assert module.MIN_SCORE_TO_CONSIDER == 0.05
+
+
+def test_score_params_min_score_can_be_explicitly_zero(monkeypatch):
+    monkeypatch.setenv("SENTINEL_MIN_SCORE_TO_CONSIDER", "0.0")
+    monkeypatch.delenv("SENTINEL_SCORE_TOP_K", raising=False)
+    module = _reload_evaluate_module()
+
+    assert module.MIN_SCORE_TO_CONSIDER == 0.0
+    assert "0.0" in module._score_params_description()

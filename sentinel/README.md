@@ -62,4 +62,10 @@ docker compose run --rm evaluation bash -c \
   (default: `all-MiniLM-L6-v2`)
 - `SENTINEL_CREATE_BANKS_TIMEOUT` / `SENTINEL_SCORE_TIMEOUT` — HTTP timeouts
   in seconds (defaults: `1800` / `60`)
+- `SENTINEL_SCORE_TOP_K` / `SENTINEL_MIN_SCORE_TO_CONSIDER` — passed straight
+  through to `POST /score`; unset by default, so the Sentinel API's own
+  defaults apply (`top_k=5`, `min_score_to_consider=0.1`). Worth
+  experimenting with if recall looks capped regardless of threshold -- a
+  nonzero chunk of conversations can end up scoring exactly 0.0 under the
+  defaults, which no threshold can recover
 - `EVAL_MODE` — `smoke` (default) or `test`

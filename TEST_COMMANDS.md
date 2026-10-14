@@ -167,6 +167,30 @@ python metrics/distance_distribution.py \
   --signal_type clip
 ```
 
+## Sentinel
+
+Sentinel (the grooming classifier) is evaluated separately from HMA -- see
+`sentinel/README.md` for the full writeup. Quick reference:
+
+```bash
+# Smoke test: tiny subset, fast end-to-end sanity check
+docker compose run --rm evaluation python sentinel/evaluate.py
+
+# Full evaluation: whole dataset, precision/recall results saved to $OUTPUT_DIR
+docker compose run --rm -e EVAL_MODE=test evaluation python sentinel/evaluate.py
+
+# Run Sentinel's own test suite (pytest is dev-only, installed on demand)
+docker compose run --rm evaluation bash -c \
+  "pip install -q -r sentinel/requirements-dev.txt && python -m pytest sentinel/tests/ -v"
+
+# Verify sentinel-app is reachable
+docker compose run --rm evaluation curl -s http://sentinel-app:8000/health
+```
+
+Full evaluation results land under
+`$OUTPUT_DIR/sentinel_evaluation_results/<timestamp>/` as
+`precision_recall_results.csv` and `precision_recall_curve.png`.
+
 ## Cleanup
 
 ```bash

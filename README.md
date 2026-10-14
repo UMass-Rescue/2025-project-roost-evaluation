@@ -248,7 +248,12 @@ the same way `hma-app` is built from a pinned `THREATEXCHANGE_COMMIT`.
   (currently `29c84fb9651f48d4e347fdc8e99cfcb7e7914ec7`)
 - **Port**: 8001 (host) → 8000 (container)
 - **Network**: `shared-hma-network`
-- **Env vars for the `evaluation` service**: `SENTINEL_HOST=sentinel-app`, `SENTINEL_PORT=8000`
+- **Env vars for the `evaluation` service**: `SENTINEL_HOST=sentinel-app`,
+  `SENTINEL_PORT=8000`, `SENTINEL_DATA_DIR=/data`
+- **Shared volume**: `sentinel-data` is mounted at `/data` in both `sentinel-app`
+  and `evaluation`. Sentinel's `POST /banks/create` takes filesystem folder
+  paths rather than uploaded files, so bank-creation inputs/outputs have to live
+  somewhere both containers can read/write at the same path.
 
 To bump the pinned commit, update the ref after the `#` in `sentinel-app.build.context`
 in `docker-compose.yaml` and rebuild with `docker compose build --no-cache sentinel-app`.

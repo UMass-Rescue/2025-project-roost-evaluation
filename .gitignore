@@ -6,3 +6,7 @@ tests/__pycache__/*
 .vscode/*
 .venv/*
 .env
+
+# Private/sensitive datasets (e.g. the grooming-conversations dataset) are
+# never committed to this repo. See sentinel/README.md.
+sentinel/dataset/

@@ -1,0 +1,3 @@
+FIXTURE_SPEAKER_A: fixture placeholder line 1
+FIXTURE_SPEAKER_B: fixture placeholder line 2
+FIXTURE_SPEAKER_A: fixture placeholder line 3

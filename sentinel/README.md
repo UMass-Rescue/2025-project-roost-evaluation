@@ -66,6 +66,11 @@ docker compose run --rm evaluation bash -c \
   through to `POST /score`; unset by default, so the Sentinel API's own
   defaults apply (`top_k=5`, `min_score_to_consider=0.1`). See "Score
   parameter experiment" below before changing these
+- `SENTINEL_DEFAULT_MIN_SIZE_OF_SCORES` — minimum number of per-message
+  scores a conversation needs before the skewness aggregator returns
+  anything other than `0.0`. Defaults to `5`, matching the Sentinel API's
+  own default. Set on the `sentinel-app` service, not `evaluation` — unlike
+  the two vars above, this isn't a `/score` request parameter
 - `EVAL_MODE` — `smoke` (default) or `test`
 
 ## Score parameter experiment

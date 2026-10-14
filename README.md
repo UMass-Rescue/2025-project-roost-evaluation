@@ -2,17 +2,27 @@
 
 ## Overview
 
-This project evaluates content matching capabilities using HMA (Hasher-Matcher-Actioner) from Facebook's ThreatExchange repository. Includes docker-compose setup that builds HMA from a locked commit and an evaluation service for running tests.
+This repo evaluates two independent systems against ground-truth datasets:
+
+- **[HMA](hma/README.md)** (Hasher-Matcher-Actioner) — image-hash matching
+  (PDQ, CLIP, CLIP-float signals) from Facebook's ThreatExchange repository,
+  via a dockerized OpenMediaMatch service.
+- **[Sentinel](sentinel/README.md)** — a text-based grooming classifier, via
+  its own dockerized API service.
+
+They're kept separate by design — different data types and different metrics
+(retrieval/distance metrics for HMA vs. classification metrics for Sentinel),
+so their code, docs, and tests live in their own `hma/` and `sentinel/`
+folders rather than shared modules. This doc only covers what's shared
+between them; follow the linked doc for either system's actual setup and
+test commands.
 
 ## Prerequisites
 
 - Docker and Docker Compose
 - Git
-- (Optional) NVIDIA GPU with nvidia-container-toolkit for GPU acceleration – default is CPU; see [GPU_SETUP.md](GPU_SETUP.md) to enable
 
 ## Quick Start
-
-**Note:** For GPU acceleration setup on Linux with NVIDIA GPU, see [GPU_SETUP.md](GPU_SETUP.md) before proceeding.
 
 ### 1. Create Docker Network
 
@@ -26,272 +36,26 @@ docker network create shared-hma-network
 docker compose up --build -d
 ```
 
-This builds HMA from ThreatExchange at a configured commit and starts:
-- PostgreSQL database for HMA
-- Database migrations
-- HMA application (port 5005 on host, 5100 internally)
-- Evaluation service
+This builds and starts, for both systems:
+- HMA: PostgreSQL database, database migrations, and the HMA application
+  (port 5005 on host, 5100 internally)
+- Sentinel: the `sentinel-app` API service (port 8001 on host, 8000 internally)
+- The shared `evaluation` service both systems' test scripts run in
 
-To change the ThreatExchange commit: set build-time `THREATEXCHANGE_COMMIT` (in `docker-compose.yaml` or via `THREATEXCHANGE_COMMIT=... docker compose up --build -d`).
+### 3. Run an Evaluation
 
-### 3. Run Tests
-
-**Smoke test (uses clip_float by default):**
-```bash
-docker compose run --rm -e BANK_NAME=SMOKE_TEST evaluation
-```
-The smoke test cleans the database, creates a bank, uploads all images from `resources/images/`, and tests matching.
-
-**All tests (uses clip_float by default):**
-```bash
-docker compose run --rm -e EVAL_MODE=test evaluation
-```
-Tests clean the database, create a bank, upload all images from `resources/images/`, and then run all test suites (pairwise, topk, threshold).
-
-**Test with a different signal type:**
-```bash
-docker compose run --rm -e EVAL_MODE=test -e SIGNAL_TYPE=clip evaluation
-```
-
-**With custom parameters:**
-```bash
-docker compose run --rm \
-  -e EVAL_MODE=test \
-  -e MAX_K=10 \
-  -e THRESHOLD_MAX=1.0 \
-  -e THRESHOLD_STEP=0.2 \
-  evaluation
-```
-
-### Local development (without docker run)
-- Ensure services are up (step 2). The compose file exposes:
-  - HMA on host port `5005`
-  - PostgreSQL on host port `55432`
-- Then you can run locally via the Makefile:
-```bash
-make smoke-test       # Uses localhost:5005 and localhost:55432
-make run-evaluation   # Runs all tests locally
-```
-
-### Performance Metrics & Visualizations
-
-After running tests with `EVAL_MODE=test`, metrics and graphs are **automatically generated** and saved to:
-```
-OUTPUT_DIR/evaluation_results/<timestamp>/
-├── pairwise_<signal_type>_compare.csv
-├── content_id_to_image_<signal_type>.json
-├── map_by_series_<signal_type>_results.csv
-├── precision_recall_<signal_type>_results.csv
-├── precision_recall_<signal_type>_curve.png
-└── distance_distribution_<signal_type>.png
-```
-
-Example: `./results/evaluation_results/20251215_193616/`
-
-You can also compute metrics manually:
-
-**mAP (Mean Average Precision):**
-```bash
-python metrics/map.py \
-  --labels resources/labels/images_series_labels.json \
-  --pairwise results/evaluation_results/<timestamp>/pairwise_clip_compare.csv \
-  --output_csv results/evaluation_results/<timestamp>/map_by_series.csv
-```
-
-**Classification Precision-Recall (threshold sweep):**
-```bash
-python metrics/precision_recall.py \
-  --labels resources/labels/images_series_labels.json \
-  --pairwise results/evaluation_results/<timestamp>/pairwise_clip_compare.csv \
-  --output_csv precision_recall_results.csv \
-  --output_plot precision_recall_curve.png
-```
-
-**Distance Distribution Histograms:**
-```bash
-python metrics/distance_distribution.py \
-  --labels resources/labels/images_series_labels.json \
-  --pairwise results/evaluation_results/<timestamp>/pairwise_clip_compare.csv \
-  --output_plot distance_distribution.png \
-  --signal_type clip
-```
-
-**What gets generated automatically:**
-- **MAP CSV**: Mean Average Precision for each series at different k values
-- **Precision-Recall CSV**: Threshold sweep results with TP/FP/FN counts
-- **Precision-Recall Plot**: Visualization of the precision-recall curve
-- **Distance Distribution Plot**: Side-by-side histograms (same-series vs different-series)
-
-The terminal will show which files were created, e.g.:
-```
-✓ All tests completed.
-Calculating MAP metrics...
-  MAP@k for clip... ✓
-    → map_by_series_clip_results.csv
-  Classification PR for clip... ✓
-    → precision_recall_clip_results.csv
-    → precision_recall_clip_curve.png
-  Distance distribution for clip... ✓
-    → distance_distribution_clip.png
-```
-
-Notes:
-- Paths in pairwise CSV generated inside Docker may start with `/build/`; the scripts normalize these automatically.
-- All metrics support `--anon_map` parameter if using anonymized paths.
-
-## Series Metadata
-
-### What is a Series?
-
-A **series** is a group of related images that should be recognized as similar by the matching system. Examples:
-- Multiple photos of the same person (e.g., "Barbara_Walters")
-- The same scene with transformations (rotations, flips)
-- The same image with different filters applied
-
-Series are defined in `resources/labels/images_series_labels.json`:
-
-```json
-{
-  "series_name": [
-    "./resources/images/image1.jpg",
-    "./resources/images/image2.jpg"
-  ]
-}
-```
-
-### Series Requirements
-
-- Each series must contain **at least 2 images**
-- Series metadata is **required** for running metrics
-- The evaluation automatically validates series metadata before running
-- If metadata is missing or invalid, tests will fail with a clear error message
-
-The series metadata is used to:
-- Calculate MAP (Mean Average Precision) for each series
-- Determine ground truth for precision/recall calculations
-- Separate distance distributions into same-series vs different-series pairs
-
-## Test Logs
-
-All test runs create detailed logs in `OUTPUT_DIR/test_run_logs/` (default `./results/test_run_logs`):
-- Format: `{test_run_type}_{date}_{time}.log` (e.g., `smoke_20251107_115430.log`)
-- Terminal shows minimal progress output
-- Full logs with timestamps saved to files
-
-## Features
-
-- **Automatic database cleanup**: Both smoke test and full test suite clean the database and populate it with test images
-- **Test isolation**: Each test run starts with a fresh database and empty index
-- **CLIP extension support**: HMA configured with clip_float as the default signal for semantic image matching
-- **Custom endpoints**: Includes `lookup_topk` and `lookup_threshold` endpoints via patch
-- **File logging**: All test output logged to files with minimal terminal noise
-
-## HMA Configuration
-
-- **Repository**: https://github.com/facebook/ThreatExchange
-- **Commit**: build-time `THREATEXCHANGE_COMMIT` (default in `Dockerfile.hma`, override in `docker-compose.yaml`).
-- **Port**: 5005 (host) → 5100 (container)
-- **Network**: `shared-hma-network`
-- **Config**: `omm_config.py` (includes CLIP extension)
-
-### Signal Types Configuration
-
-Signal types are configured in `omm_config.py`. This evaluation uses **CLIPFloatSignal** by default.
-
-**Available signals:**
-- **HMA built-in:**
-  - `PdqSignal`: Meta's perceptual hash for images (0-256 range)
-  - `VideoMD5Signal`: MD5 hash for exact video matching
-- **CLIP extension:**
-  - `CLIPSignal`: Integer-based CLIP embeddings (0-100 range)
-  - `CLIPFloatSignal`: Float-based CLIP embeddings (0.0-1.0 range) - **default**
-
-To enable additional signals, edit `omm_config.py` and uncomment the desired signal types in the `signal_types` list.
-
-### CLIP Index Configuration
-
-The CLIP extension supports two index types for `clip_float`:
-- **HNSW (Approximate)**: Fast approximate nearest neighbor search (default)
-- **Flat (Exact)**: Exact search using brute-force comparison
-
-To disable HNSW and use exact/flat search, add to the `hma-app` service in `docker-compose.yaml`:
-```yaml
-hma-app:
-  environment:
-    <<: *omm-variables
-    CLIP_DISABLE_HNSW_INDEX: 'true'
-```
-
-**Check which index type is being used** (logs appear when index is loaded at runtime):
-```bash
-# After running tests - check signal-level wrapper
-docker compose logs hma-app 2>&1 | grep "CLIP_SIGNAL_INDEX_TYPE" | head -1
-# Example output: CLIPHNSWIndex (approximate/hnsw search wrapper, M=32, ef_construction=200, ef_search=128)
-
-# Or check matcher-level FAISS index
-docker compose logs hma-app 2>&1 | grep "CLIP_MATCHER_INDEX_TYPE" | head -1
-# Example output: CLIPHNSWVectorIndex (approximate/hnsw search, M=32, ef_construction=200, ef_search=128)
-```
-
-With `CLIP_DISABLE_HNSW_INDEX: 'true'` you'll see `CLIPFloatIndex (exact/flat)` or `CLIPFloatVectorIndex (exact/flat)` instead.
-
-## Sentinel Configuration
-
-Sentinel is a grooming classifier, served as its own HTTP API from a separate,
-standalone repo: [UMass-Rescue/sentinel-api](https://github.com/UMass-Rescue/sentinel-api).
-Its code is **not** vendored in this repo — `docker-compose.yaml` builds the
-`sentinel-app` service directly from that repo via a pinned git-context build,
-the same way `hma-app` is built from a pinned `THREATEXCHANGE_COMMIT`.
-
-- **Repository**: https://github.com/UMass-Rescue/sentinel-api
-- **Commit**: pinned in `docker-compose.yaml`'s `sentinel-app.build.context`
-  (currently `29c84fb9651f48d4e347fdc8e99cfcb7e7914ec7`)
-- **Port**: 8001 (host) → 8000 (container)
-- **Network**: `shared-hma-network`
-- **Env vars for the `evaluation` service**: `SENTINEL_HOST=sentinel-app`,
-  `SENTINEL_PORT=8000`, `SENTINEL_DATA_DIR=/data`
-- **Shared volume**: `sentinel-data` is mounted at `/data` in both `sentinel-app`
-  and `evaluation`. Sentinel's `POST /banks/create` takes filesystem folder
-  paths rather than uploaded files, so bank-creation inputs/outputs have to live
-  somewhere both containers can read/write at the same path.
-
-To bump the pinned commit, update the ref after the `#` in `sentinel-app.build.context`
-in `docker-compose.yaml` and rebuild with `docker compose build --no-cache sentinel-app`.
-
-See `sentinel/README.md` for the planned layout of Sentinel-specific evaluation code
-(metrics, tests, labeled resources) in this repo.
+- **HMA**: see [hma/README.md](hma/README.md) and [hma/TEST_COMMANDS.md](hma/TEST_COMMANDS.md)
+  for test commands, metrics, and configuration.
+- **Sentinel**: see [sentinel/README.md](sentinel/README.md) for test commands,
+  dataset setup, and configuration.
 
 ## Environment Variables
 
-### Test Configuration
+These two are read by both systems' evaluation scripts; everything else is
+system-specific (see the linked docs above):
+
 - `EVAL_MODE`: `smoke` (default) or `test`
-- `BANK_NAME`: Bank name for testing (default: `TEST_BANK_DATA`)
-- `SIGNAL_TYPE`: Signal type for matching (default: `clip_float`)
-  - `clip_float`: Float-based distance/thresholds (0.0-1.0 range) - **default**
-  - Can be changed to other signal types if available (e.g., `SIGNAL_TYPE=clip` for integer-based thresholds)
-- `MAX_K`: Maximum k for top-k test (default: `5`)
-- `THRESHOLD_MAX`: Maximum threshold value (default: `1.0` for clip_float, `100` for clip)
-- `THRESHOLD_STEP`: Threshold step size (default: `0.2` for clip_float, `20` for clip)
-
-### HMA Connection (auto-configured in docker-compose)
-- `HMA_HOST`: `hma-app` (internal container name)
-- `HMA_PORT`: `5100` (internal container port)
-
-### Output and Anonymization
-- `OUTPUT_DIR`: Root directory for all outputs (default: `./results`).
-  - Results: `OUTPUT_DIR/evaluation_results/<timestamp>/...`
-  - Logs: `OUTPUT_DIR/test_run_logs/`
-  - Mapping: `OUTPUT_DIR/file_to_id_map/anon_id_map.json` (default if not overridden)
-- `DEANONYMIZE_IMAGE_PATHS`: Set to `1` to disable anonymization (filename anonymization is ON by default).
-- `ANON_ID_MAP_FILEPATH`: Optional override for the mapping file path. If set, uses this as a persistent path→ID store (loads existing mappings and updates after runs). The file contains `{ "<full_path>": "<id>" }`. **DON'T SHARE THIS FILE** if you don't want to leak original image paths.
-
-## Results
-
-Test results are saved under `OUTPUT_DIR/evaluation_results/<timestamp>/` (default `./results/evaluation_results/<timestamp>/`):
-- `pairwise_<signal_type>_compare.csv`
-- `topk_test_<signal_type>_results.csv`
-- `threshold_test_<signal_type>_results.csv`
-- `content_id_to_image_<signal_type>.json`
+- `OUTPUT_DIR`: root directory for all outputs (default: `./results`)
 
 ## Troubleshooting
 
@@ -299,17 +63,27 @@ Test results are saved under `OUTPUT_DIR/evaluation_results/<timestamp>/` (defau
 # Check service status
 docker compose ps
 
-# View logs
-docker compose logs hma-app
+# View evaluation service logs
 docker compose logs evaluation
 
-# Check HMA API
-curl http://localhost:5005/c/banks
-
-# Verify database
-docker compose exec hma-postgresql psql -U postgres -d media_match -c "\dt"
+# Check for errors across all services
+docker compose logs | grep -i error
 ```
 
-## Description of the tests
+For system-specific troubleshooting (service health checks, database
+connectivity, etc.), see [hma/README.md](hma/README.md#troubleshooting) or
+[sentinel/README.md](sentinel/README.md).
 
-Refer to [EVALUATION_DESCRIPTION.md](EVALUATION_DESCRIPTION.md) for an overview of the tests.
+## Cleanup
+
+```bash
+# Stop services
+docker compose down
+
+# Remove volumes (fresh start)
+docker compose down -v
+
+# Rebuild
+docker compose build --no-cache
+docker compose up --build -d
+```

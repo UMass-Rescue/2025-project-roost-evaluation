@@ -11,7 +11,7 @@ The commit hash should be from your fork's `origin/main` branch synced with upst
 git diff origin/main origin/development > hma.patch
 ```
 
-2. Copy to `resources/patches/hma.patch`
+2. Copy to `hma/resources/patches/hma.patch`
 
 3. Update the commit hash at THREATEXCHANGE_COMMIT in `Dockerfile.hma`
 

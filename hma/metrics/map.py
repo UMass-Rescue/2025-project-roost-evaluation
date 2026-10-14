@@ -4,11 +4,11 @@ import csv
 from pathlib import Path
 from typing import Dict, List, Set, Tuple, Optional
 
-from metrics.common import (
+from hma.metrics.common import (
     load_and_validate_data, ensure_output_dir, normalize_pairwise_path,
     load_labels, load_anon_id_map, build_image_to_series_map
 )
-from metrics.retrieval_pr import load_retrieval_results_csv
+from hma.metrics.retrieval_pr import load_retrieval_results_csv
 
 
 def build_rankings(

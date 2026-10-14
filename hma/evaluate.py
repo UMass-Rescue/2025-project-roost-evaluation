@@ -6,7 +6,7 @@ import json
 import time
 from pathlib import Path
 import logging
-from series_labels_utils import get_image_files, ensure_labels_file
+from hma.series_labels_utils import get_image_files, ensure_labels_file
 from datetime import datetime
 
 # Try to import psycopg2 for database access (optional)
@@ -16,7 +16,7 @@ try:
 except ImportError:
     PSYCOPG2_AVAILABLE = False
 
-image_input_dir = Path("./resources/images")
+image_input_dir = Path("./hma/resources/images")
 hma_host = os.getenv("HMA_HOST", "host.docker.internal")
 hma_port = os.getenv("HMA_PORT", "5005")
 hma_app_url = f"http://{hma_host}:{hma_port}"
@@ -664,12 +664,12 @@ class Evaluator:
 def calculate_metrics(results_dir):
     """Calculate MAP (from retrieval), classification PR (from pairwise), and distance plots."""
     # Import here to avoid circular dependency
-    from metrics.map import compute_map_from_retrieval_csv
-    from metrics.precision_recall import compute_precision_recall_from_pairwise
-    from metrics.distance_distribution import compute_distance_distribution
-    from metrics.common import validate_series_metadata_exists
+    from hma.metrics.map import compute_map_from_retrieval_csv
+    from hma.metrics.precision_recall import compute_precision_recall_from_pairwise
+    from hma.metrics.distance_distribution import compute_distance_distribution
+    from hma.metrics.common import validate_series_metadata_exists
     
-    labels_path = Path(os.getenv(LABELS_PATH_ENV, "resources/labels/images_series_labels.json"))
+    labels_path = Path(os.getenv(LABELS_PATH_ENV, "hma/resources/labels/images_series_labels.json"))
     image_dir = Path(os.environ.get("IMAGE_INPUT_DIR", str(image_input_dir)))
     labels_path = ensure_labels_file(labels_path, image_dir)
     
@@ -706,7 +706,7 @@ def calculate_metrics(results_dir):
         _log_warning(f"No retrieval results found (topk or threshold) for {SIGNAL_TYPE}")
     else:
         # Load content_id -> image mapping from saved file (created during upload)
-        from tests.test_utils import load_content_id_mapping
+        from hma.tests.test_utils import load_content_id_mapping
         content_id_to_image = load_content_id_mapping(results_dir, SIGNAL_TYPE)
         
         if content_id_to_image:
@@ -783,7 +783,7 @@ def run_all_tests():
     print("Running tests...")
     
     # Import here to avoid circular dependency
-    from metrics.common import validate_series_metadata_exists
+    from hma.metrics.common import validate_series_metadata_exists
     try:
         validate_series_metadata_exists()
     except ValueError as e:
@@ -811,7 +811,7 @@ def run_all_tests():
     content_id_to_image = evaluator.upload_files_to_bank(files_to_send, BANK_NAME)
     
     # Save content_id -> image_path mapping to results directory for later use in metrics
-    from tests.test_utils import save_content_id_mapping
+    from hma.tests.test_utils import save_content_id_mapping
     content_id_map_file = save_content_id_mapping(content_id_to_image, SIGNAL_TYPE)
     _log_info(f"Saved content_id mapping to {content_id_map_file} ({len(content_id_to_image)} entries)")
     
@@ -898,7 +898,7 @@ def main():
         content_id_to_image = evaluator.upload_files_to_bank(files_to_send, BANK_NAME)
         
         # Save content_id -> image_path mapping
-        from tests.test_utils import save_content_id_mapping
+        from hma.tests.test_utils import save_content_id_mapping
         content_id_map_file = save_content_id_mapping(content_id_to_image, SIGNAL_TYPE)
         _log_info(f"Saved content_id mapping to {content_id_map_file} ({len(content_id_to_image)} entries)")
         

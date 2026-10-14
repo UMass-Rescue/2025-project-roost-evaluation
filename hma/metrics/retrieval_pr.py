@@ -14,7 +14,7 @@ try:
 except ImportError:
     MATPLOTLIB_AVAILABLE = False
 
-from metrics.common import (
+from hma.metrics.common import (
     load_labels,
     load_anon_id_map,
     normalize_pairwise_path,

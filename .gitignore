@@ -2,7 +2,7 @@ test_run_logs/
 evaluations_results/
 results/*
 __pycache__/*
-tests/__pycache__/*
+hma/tests/__pycache__/*
 .vscode/*
 .venv/*
 .env

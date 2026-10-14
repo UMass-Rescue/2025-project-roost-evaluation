@@ -1,22 +1,6 @@
-# Test Commands Reference
+# HMA Test Commands Reference
 
-## Quick Reference
-
-- **`docker compose exec`**: Run commands in running services (hma-app, hma-postgresql)
-- **`docker compose run --rm`**: Run one-off commands in evaluation service (exits after completion)
-
-## Setup
-
-```bash
-# Create network
-docker network create shared-hma-network
-
-# Start services
-docker compose up --build -d
-
-# Check status
-docker compose ps
-```
+Run `docker compose up --build -d` first (see root [README.md](../README.md)'s Quick Start section).
 
 ## Run Tests
 
@@ -45,16 +29,16 @@ docker compose run --rm -e EVAL_MODE=test -e SIGNAL_TYPE=clip_float evaluation
 ### Individual Tests
 ```bash
 # Pairwise test (specify signal type)
-docker compose run --rm -e SIGNAL_TYPE=clip evaluation python tests/pairwise_test.py
-docker compose run --rm -e SIGNAL_TYPE=clip_float evaluation python tests/pairwise_test.py
+docker compose run --rm -e SIGNAL_TYPE=clip evaluation python hma/tests/pairwise_test.py
+docker compose run --rm -e SIGNAL_TYPE=clip_float evaluation python hma/tests/pairwise_test.py
 
 # Top-k test
-docker compose run --rm -e SIGNAL_TYPE=clip -e MAX_K=5 evaluation python tests/topk_test.py
-docker compose run --rm -e SIGNAL_TYPE=clip_float -e MAX_K=5 evaluation python tests/topk_test.py
+docker compose run --rm -e SIGNAL_TYPE=clip -e MAX_K=5 evaluation python hma/tests/topk_test.py
+docker compose run --rm -e SIGNAL_TYPE=clip_float -e MAX_K=5 evaluation python hma/tests/topk_test.py
 
 # Threshold test
-docker compose run --rm -e SIGNAL_TYPE=clip -e THRESHOLD_MAX=50 -e THRESHOLD_STEP=10 evaluation python tests/threshold_test.py
-docker compose run --rm -e SIGNAL_TYPE=clip_float -e THRESHOLD_MAX=1.0 -e THRESHOLD_STEP=0.2 evaluation python tests/threshold_test.py
+docker compose run --rm -e SIGNAL_TYPE=clip -e THRESHOLD_MAX=50 -e THRESHOLD_STEP=10 evaluation python hma/tests/threshold_test.py
+docker compose run --rm -e SIGNAL_TYPE=clip_float -e THRESHOLD_MAX=1.0 -e THRESHOLD_STEP=0.2 evaluation python hma/tests/threshold_test.py
 ```
 
 ### Custom Parameters
@@ -111,7 +95,7 @@ cat evaluations_results/<timestamp>/pairwise_clip_float_compare.json | head -50
 
 ## Performance Metrics & Graphs
 
-After tests complete, `evaluate.py` automatically generates performance metrics and visualizations:
+After tests complete, `hma/evaluate.py` automatically generates performance metrics and visualizations:
 
 ### Outputs Generated
 
@@ -143,16 +127,16 @@ open evaluations_results/<timestamp>/distance_distribution_clip.png
 
 **MAP:**
 ```bash
-python metrics/map.py \
-  --labels resources/labels/images_series_labels.json \
+PYTHONPATH=. python hma/metrics/map.py \
+  --labels hma/resources/labels/images_series_labels.json \
   --pairwise evaluations_results/<timestamp>/pairwise_clip_compare.json \
   --output_csv custom_map_results.csv
 ```
 
 **Classification Precision-Recall (threshold sweep):**
 ```bash
-python metrics/precision_recall.py \
-  --labels resources/labels/images_series_labels.json \
+PYTHONPATH=. python hma/metrics/precision_recall.py \
+  --labels hma/resources/labels/images_series_labels.json \
   --pairwise evaluations_results/<timestamp>/pairwise_clip_compare.json \
   --output_csv precision_recall_results.csv \
   --output_plot precision_recall_curve.png
@@ -160,57 +144,16 @@ python metrics/precision_recall.py \
 
 **Distance distribution:**
 ```bash
-python metrics/distance_distribution.py \
-  --labels resources/labels/images_series_labels.json \
+PYTHONPATH=. python hma/metrics/distance_distribution.py \
+  --labels hma/resources/labels/images_series_labels.json \
   --pairwise evaluations_results/<timestamp>/pairwise_clip_compare.json \
   --output_plot distance_distribution.png \
   --signal_type clip
 ```
 
-## Sentinel
-
-Sentinel (the grooming classifier) is evaluated separately from HMA -- see
-`sentinel/README.md` for the full writeup. Quick reference:
-
-```bash
-# Smoke test: tiny subset, fast end-to-end sanity check
-docker compose run --rm evaluation python sentinel/evaluate.py
-
-# Full evaluation: whole dataset, precision/recall results saved to $OUTPUT_DIR
-docker compose run --rm -e EVAL_MODE=test evaluation python sentinel/evaluate.py
-
-# Run Sentinel's own test suite (pytest is dev-only, installed on demand)
-docker compose run --rm evaluation bash -c \
-  "pip install -q -r sentinel/requirements-dev.txt && python -m pytest sentinel/tests/ -v"
-
-# Verify sentinel-app is reachable
-docker compose run --rm evaluation curl -s http://sentinel-app:8000/health
-```
-
-Full evaluation results land under
-`$OUTPUT_DIR/sentinel_evaluation_results/<timestamp>/` as
-`precision_recall_results.csv` and `precision_recall_curve.png`.
-
-## Cleanup
-
-```bash
-# Stop services
-docker compose down
-
-# Remove volumes (fresh start)
-docker compose down -v
-
-# Rebuild
-docker compose build --no-cache
-docker compose up --build -d
-```
-
 ## Troubleshooting
 
 ```bash
-# Check for errors
-docker compose logs | grep -i error
-
 # Test connectivity
 docker compose run --rm evaluation curl -s http://hma-app:5100/c/banks
 

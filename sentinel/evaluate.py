@@ -42,6 +42,17 @@ BANK_MODEL_NAME = os.getenv("SENTINEL_BANK_MODEL", "all-MiniLM-L6-v2")
 CREATE_BANKS_TIMEOUT_SECONDS = int(os.getenv("SENTINEL_CREATE_BANKS_TIMEOUT", "1800"))
 SCORE_TIMEOUT_SECONDS = int(os.getenv("SENTINEL_SCORE_TIMEOUT", "60"))
 
+# Unset by default -- the Sentinel API applies its own defaults (top_k=5,
+# min_score_to_consider=0.1) when these aren't sent. See sentinel/README.md
+# for notes on how these affect results.
+_SCORE_TOP_K_RAW = os.getenv("SENTINEL_SCORE_TOP_K")
+SCORE_TOP_K: Optional[int] = int(_SCORE_TOP_K_RAW) if _SCORE_TOP_K_RAW else None
+
+_MIN_SCORE_TO_CONSIDER_RAW = os.getenv("SENTINEL_MIN_SCORE_TO_CONSIDER")
+MIN_SCORE_TO_CONSIDER: Optional[float] = (
+    float(_MIN_SCORE_TO_CONSIDER_RAW) if _MIN_SCORE_TO_CONSIDER_RAW else None
+)
+
 SMOKE_TEST_FILES_PER_CLASS = 10
 
 OUTPUT_ROOT = Path(os.getenv("OUTPUT_DIR", "./results"))
@@ -126,7 +137,9 @@ def _score_conversations(
         if not lines:
             logger.warning(f"Skipping empty conversation: {conversation.path}")
             continue
-        result = evaluator.score(lines)
+        result = evaluator.score(
+            lines, top_k=SCORE_TOP_K, min_score_to_consider=MIN_SCORE_TO_CONSIDER
+        )
         score = result["rare_class_affinity_score"]
         labeled_scores.append((score, label))
         logger.debug(
@@ -135,8 +148,17 @@ def _score_conversations(
     return labeled_scores
 
 
+def _score_params_description() -> str:
+    top_k = "API default (5)" if SCORE_TOP_K is None else SCORE_TOP_K
+    min_score = (
+        "API default (0.1)" if MIN_SCORE_TO_CONSIDER is None else MIN_SCORE_TO_CONSIDER
+    )
+    return f"top_k={top_k}, min_score_to_consider={min_score}"
+
+
 def run_smoke_test() -> None:
     print("Running Sentinel smoke test...")
+    print(f"  Score params: {_score_params_description()}")
     evaluator = SentinelEvaluator()
 
     print("  Checking health...")
@@ -161,7 +183,9 @@ def run_smoke_test() -> None:
         print("  No test conversations with ground truth available, skipping.")
         return
     conversation, label = conversations[0]
-    result = evaluator.score(conversation.lines())
+    result = evaluator.score(
+        conversation.lines(), top_k=SCORE_TOP_K, min_score_to_consider=MIN_SCORE_TO_CONSIDER
+    )
     print(
         f"    conversation={conversation.path.name} ground_truth={label} "
         f"score={result['rare_class_affinity_score']:.4f}"
@@ -172,6 +196,7 @@ def run_smoke_test() -> None:
 def run_full_evaluation() -> None:
     start_time = time.time()
     print("Running full Sentinel evaluation...")
+    print(f"  Score params: {_score_params_description()}")
     evaluator = SentinelEvaluator()
 
     print("Staging 1-line banks...")

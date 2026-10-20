@@ -1,7 +1,7 @@
 # Dockerfile to build HMA from ThreatExchange repository at a specific commit
 # ThreatExchange commit hash (compatible with hma.patch): aff3f3b8
 
-FROM python:3.11-bullseye as builder
+FROM python:3.11-trixie as builder
 
 # Accept build argument for commit hash
 ARG THREATEXCHANGE_COMMIT=aff3f3b8
@@ -23,7 +23,7 @@ RUN git clone https://github.com/facebook/ThreatExchange.git . && \
     rm -rf .git /tmp/hma.patch
 
 # Build stage - build HMA from the cloned source
-FROM python:3.11-bullseye
+FROM python:3.11-trixie
 
 # Ensure Python logs are sent to stdout/stderr immediately without buffering
 ENV PYTHONUNBUFFERED=1

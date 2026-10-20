@@ -89,6 +89,9 @@ services:
     restart: unless-stopped
     ports:
       - "8001:8000"
+    environment:
+      # Server-side only, not a /score request param -- see sentinel/README.md.
+      - SENTINEL_DEFAULT_MIN_SIZE_OF_SCORES=${SENTINEL_DEFAULT_MIN_SIZE_OF_SCORES:-5}
     volumes:
       # Shared with `evaluation` so bank-creation requests can reference
       # folder paths that resolve inside this container too -- see the

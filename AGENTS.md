@@ -8,8 +8,8 @@ This repo evaluates two independent systems against ground-truth datasets:
 
 - **HMA** (Hasher-Matcher-Actioner) — image-hash matching (PDQ, CLIP, CLIP-float
   signals) via a dockerized OpenMediaMatch service.
-- **Sentinel** — a text-based grooming classifier, via its own dockerized API
-  service.
+- **Sentinel** — a rare-class affinity detector for text, evaluated here on a
+  grooming-conversation dataset, via its own dockerized API service.
 
 ## Repo layout
 

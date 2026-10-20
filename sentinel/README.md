@@ -1,10 +1,12 @@
-# Sentinel (grooming classifier) evaluation
+# Sentinel evaluation
 
-Sentinel is a grooming classifier, served as its own HTTP API from a separate,
-standalone repo: [UMass-Rescue/sentinel-api](https://github.com/UMass-Rescue/sentinel-api).
+Sentinel is a rare-class affinity detector. It scores text against banks of
+rare and common examples and returns a `rare_class_affinity_score`. This
+repo evaluates it on a grooming-conversation dataset. It is served as its own
+HTTP API from a separate, standalone repo:
+[UMass-Rescue/sentinel-api](https://github.com/UMass-Rescue/sentinel-api).
 Its code is **not** vendored in this repo — `docker-compose.yaml` builds the
-`sentinel-app` service directly from that repo via a pinned git-context build,
-the same way `hma-app` is built from a pinned `THREATEXCHANGE_COMMIT`.
+`sentinel-app` service directly from that repo via a pinned git-context build.
 
 Make sure you've completed the root [README.md](../README.md)'s "Quick Start"
 (network + `docker compose up --build -d`) before following this doc.

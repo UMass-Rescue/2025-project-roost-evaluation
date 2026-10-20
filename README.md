@@ -7,8 +7,9 @@ This repo evaluates two independent systems against ground-truth datasets:
 - **[HMA](hma/README.md)** (Hasher-Matcher-Actioner) — image-hash matching
   (PDQ, CLIP, CLIP-float signals) from Facebook's ThreatExchange repository,
   via a dockerized OpenMediaMatch service.
-- **[Sentinel](sentinel/README.md)** — a text-based grooming classifier, via
-  its own dockerized API service.
+- **[Sentinel](sentinel/README.md)** — a rare-class affinity detector for text,
+  evaluated here on a grooming-conversation dataset, via its own dockerized
+  API service.
 
 They're kept separate by design — different data types and different metrics
 (retrieval/distance metrics for HMA vs. classification metrics for Sentinel),

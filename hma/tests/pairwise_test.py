@@ -3,8 +3,8 @@ import itertools
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from tqdm import tqdm
-from tests.test_utils import get_image_files, hash_image, hash_images_batch, write_results
-from evaluate import Evaluator, _log_info, _log_debug, _log_warning
+from hma.tests.test_utils import get_image_files, hash_image, hash_images_batch, write_results
+from hma.evaluate import Evaluator, _log_info, _log_debug, _log_warning
 
 def main():
     # Read signal_type from env (fresh each call)

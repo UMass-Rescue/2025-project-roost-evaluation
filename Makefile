@@ -20,10 +20,10 @@ activate-env: create-env
 
 smoke-test: activate-env
 	@echo "Running smoke test locally against HMA at $(HMA_HOST):$(HMA_PORT)..."
-	OUTPUT_DIR=$(OUTPUT_DIR) HMA_HOST=$(HMA_HOST) HMA_PORT=$(HMA_PORT) POSTGRES_HOST=localhost POSTGRES_PORT=55432 BANK_NAME=SMOKE_TEST $(PY) evaluate.py
+	PYTHONPATH=. OUTPUT_DIR=$(OUTPUT_DIR) HMA_HOST=$(HMA_HOST) HMA_PORT=$(HMA_PORT) POSTGRES_HOST=localhost POSTGRES_PORT=55432 BANK_NAME=SMOKE_TEST $(PY) hma/evaluate.py
 
 run-evaluation: activate-env
 	@echo "Running full evaluation locally against HMA at $(HMA_HOST):$(HMA_PORT)..."
-	OUTPUT_DIR=$(OUTPUT_DIR) HMA_HOST=$(HMA_HOST) HMA_PORT=$(HMA_PORT) POSTGRES_HOST=localhost POSTGRES_PORT=55432 EVAL_MODE=test $(PY) evaluate.py
+	PYTHONPATH=. OUTPUT_DIR=$(OUTPUT_DIR) HMA_HOST=$(HMA_HOST) HMA_PORT=$(HMA_PORT) POSTGRES_HOST=localhost POSTGRES_PORT=55432 EVAL_MODE=test $(PY) hma/evaluate.py
 
 

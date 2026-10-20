@@ -259,7 +259,7 @@ def build_image_to_series_map(series_to_images: Dict[str, Set[str]]) -> Dict[str
 def validate_series_metadata_exists(labels_path: str = None) -> None:
     """Validate series metadata file exists and has valid data."""
     if labels_path is None:
-        labels_path = "resources/labels/images_series_labels.json"
+        labels_path = "hma/resources/labels/images_series_labels.json"
     
     if not Path(labels_path).exists():
         raise ValueError(f"Series metadata not found: {labels_path}")

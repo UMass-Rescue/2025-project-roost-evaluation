@@ -9,14 +9,15 @@ WORKDIR /build
 COPY requirements.txt /build/
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY evaluate.py /build/
-COPY tests/ /build/tests/
-COPY metrics/ /build/metrics/
-COPY resources/images /build/resources/images
-COPY resources/labels /build/resources/labels 
+COPY hma/evaluate.py /build/hma/evaluate.py
+COPY hma/series_labels_utils.py /build/hma/series_labels_utils.py
+COPY hma/tests/ /build/hma/tests/
+COPY hma/metrics/ /build/hma/metrics/
+COPY hma/resources/images /build/hma/resources/images
+COPY hma/resources/labels /build/hma/resources/labels
 
 # Set default image directory, can be overridden at runtime
-ENV IMAGE_INPUT_DIR=/build/resources/images
+ENV IMAGE_INPUT_DIR=/build/hma/resources/images
 ENV PYTHONPATH=/build
 
-CMD ["python", "evaluate.py"]
+CMD ["python", "hma/evaluate.py"]

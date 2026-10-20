@@ -1,5 +1,5 @@
 """
-Evaluation script for Sentinel's grooming classifier API.
+Evaluation script for Sentinel's rare-class affinity API.
 
 Flow (EVAL_MODE=test):
 1. Stage the 1-line conversations into bank-creation input folders

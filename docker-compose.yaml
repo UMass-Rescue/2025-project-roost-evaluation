@@ -1,7 +1,7 @@
 # ThreatExchange commit hash (compatible with hma.patch)
 # Commit: aff3f3b8
 #
-# Sentinel API (grooming classifier service) commit
+# Sentinel API (rare-class affinity detector) commit
 # Repo: https://github.com/UMass-Rescue/sentinel-api
 # Commit: 29c84fb9651f48d4e347fdc8e99cfcb7e7914ec7
 #
@@ -39,7 +39,7 @@ services:
   hma-migrations:
     build:
       context: .
-      dockerfile: Dockerfile.hma
+      dockerfile: hma/Dockerfile.hma
       args:
         THREATEXCHANGE_COMMIT: aff3f3b8
         PYTORCH_CUDA: ${PYTORCH_CUDA:-cpu}  # GPU: PYTORCH_CUDA=cu128
@@ -56,7 +56,7 @@ services:
   hma-app:
     build:
       context: .
-      dockerfile: Dockerfile.hma
+      dockerfile: hma/Dockerfile.hma
       args:
         THREATEXCHANGE_COMMIT: aff3f3b8
         PYTORCH_CUDA: ${PYTORCH_CUDA:-cpu}  # GPU: PYTORCH_CUDA=cu128 (match nvidia-smi)
@@ -95,7 +95,7 @@ services:
     volumes:
       # Shared with `evaluation` so bank-creation requests can reference
       # folder paths that resolve inside this container too -- see the
-      # root README.md's "Sentinel Configuration" section.
+      # sentinel/README.md's "Service wiring" section.
       - sentinel-data:/data
     networks:
       - shared-hma-network

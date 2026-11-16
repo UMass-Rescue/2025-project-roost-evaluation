@@ -124,6 +124,24 @@ def _plot_pr(rows: List[dict], output_plot: str, signal_type: str) -> None:
     plt.close()
 
 
+def compute_precision_recall_from_labeled(
+    labeled: List[Tuple[float, bool]],
+    output_csv: str,
+    output_plot: Optional[str] = None,
+    signal_type: str = "",
+) -> None:
+    """
+    Sweep a distance threshold over (distance, is_same_series) pairs and write
+    precision/recall/FPR to CSV (and a curve to output_plot, if given).
+    Distances are "smaller is more similar"; convert a similarity score with 1 - score.
+    """
+    thresholds = _auto_thresholds(labeled)
+    rows = _sweep_thresholds(labeled, thresholds)
+    _write_csv(rows, output_csv)
+    if output_plot:
+        _plot_pr(rows, output_plot, signal_type)
+
+
 def compute_precision_recall_from_pairwise(
     labels_path: str,
     pairwise_path: str,
@@ -136,11 +154,7 @@ def compute_precision_recall_from_pairwise(
         labels_path, pairwise_path, anon_map_path
     )
     labeled = classify_pairwise_by_series(series_to_images, entries, id_to_path)
-    thresholds = _auto_thresholds(labeled)
-    rows = _sweep_thresholds(labeled, thresholds)
-    _write_csv(rows, output_csv)
-    if output_plot:
-        _plot_pr(rows, output_plot, signal_type)
+    compute_precision_recall_from_labeled(labeled, output_csv, output_plot, signal_type)
 
 
 def main():

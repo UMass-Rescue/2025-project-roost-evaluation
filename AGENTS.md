@@ -13,16 +13,19 @@ This repo evaluates two independent systems against ground-truth datasets:
 
 ## Repo layout
 
-- `hma/` holds everything HMA-specific: `evaluate.py`, `metrics/`,
-  `resources/`, `tests/`, `series_labels_utils.py`, `omm_config.py`,
-  `Dockerfile.hma`, plus its own `GPU_SETUP.md` and
+- `hma/` holds everything HMA-specific. Code shared by the HMA evaluations
+  sits at its root (`hma_client.py`, `logging_utils.py`, `results_utils.py`,
+  `path_id_store.py`, `metrics/`, `unit_tests/`), next to the HMA build
+  (`Dockerfile.hma`, `omm_config.py`, `resources/patches/`) and `GPU_SETUP.md`.
+  Each content type has its own folder: `hma/image/` holds `evaluate.py`,
+  `tests/`, `resources/`, `series_labels_utils.py`, `TEST_COMMANDS.md` and
   `EVALUATION_DESCRIPTION.md`.
 - `sentinel/` holds the equivalent shape for the **Sentinel** domain.
 - Root-level files (`README.md`, `docker-compose.yaml`, `Dockerfile`,
   `requirements.txt`, `Makefile`) are shared across both domains —
   `Dockerfile`/`requirements.txt` build the single `evaluation` image both
-  `hma/evaluate.py` and `sentinel/evaluate.py` run in.
-- `hma/TEST_COMMANDS.md` and `sentinel/README.md` hold each domain's own
+  `hma/image/evaluate.py` and `sentinel/evaluate.py` run in.
+- `hma/image/TEST_COMMANDS.md` and `sentinel/README.md` hold each domain's own
   exhaustive command reference; the root `README.md` only covers shared
   setup/cleanup.
 
@@ -41,7 +44,7 @@ make smoke-test       # local equivalent, against localhost
 make run-evaluation    # local equivalent, full suite
 ```
 
-See `hma/TEST_COMMANDS.md`, `sentinel/README.md`, `hma/EVALUATION_DESCRIPTION.md`,
+See `hma/image/TEST_COMMANDS.md`, `sentinel/README.md`, `hma/image/EVALUATION_DESCRIPTION.md`,
 and `hma/GPU_SETUP.md` for full detail — don't duplicate that detail here.
 
 ## Code conventions
@@ -75,9 +78,9 @@ and `hma/GPU_SETUP.md` for full detail — don't duplicate that detail here.
 ## Further reading
 
 - `README.md` — shared setup/cleanup; links out to the two systems below
-- `hma/README.md` / `hma/TEST_COMMANDS.md` — HMA setup, configuration, and
+- `hma/README.md` / `hma/image/TEST_COMMANDS.md` — HMA setup, configuration, and
   exhaustive command reference
-- `hma/EVALUATION_DESCRIPTION.md` — what each HMA test suite actually measures
+- `hma/image/EVALUATION_DESCRIPTION.md` — what each HMA test suite actually measures
 - `hma/GPU_SETUP.md` — GPU acceleration setup
 - `sentinel/README.md` — Sentinel service wiring, evaluation code layout, and
   command reference

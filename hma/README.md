@@ -10,19 +10,27 @@ Make sure you've completed the root [README.md](../README.md)'s "Quick Start"
 - (Optional) NVIDIA GPU with nvidia-container-toolkit for GPU acceleration –
   default is CPU; see [GPU_SETUP.md](GPU_SETUP.md) to enable.
 
+## Code layout
+
+- `hma/` (this folder): code shared by the HMA evaluations (the HMA client in
+  `hma_client.py`, logging, result writers, `metrics/`), the HMA build
+  (`Dockerfile.hma`, `omm_config.py`, `resources/patches/`) and `unit_tests/`.
+- `hma/image/`: the image evaluation (`evaluate.py`, `tests/`, `resources/`).
+  Commands are in [image/TEST_COMMANDS.md](image/TEST_COMMANDS.md).
+
 ## Run Tests
 
 **Smoke test (uses clip_float by default):**
 ```bash
 docker compose run --rm -e BANK_NAME=SMOKE_TEST evaluation
 ```
-The smoke test cleans the database, creates a bank, uploads all images from `hma/resources/images/`, and tests matching.
+The smoke test cleans the database, creates a bank, uploads all images from `hma/image/resources/images/`, and tests matching.
 
 **All tests (uses clip_float by default):**
 ```bash
 docker compose run --rm -e EVAL_MODE=test evaluation
 ```
-Tests clean the database, create a bank, upload all images from `hma/resources/images/`, and then run all test suites (pairwise, topk, threshold).
+Tests clean the database, create a bank, upload all images from `hma/image/resources/images/`, and then run all test suites (pairwise, topk, threshold).
 
 **Test with a different signal type:**
 ```bash
@@ -49,6 +57,15 @@ make smoke-test       # Uses localhost:5005 and localhost:55432
 make run-evaluation   # Runs all tests locally
 ```
 
+## Unit tests
+
+The unit tests in `hma/unit_tests/` mock the HMA HTTP layer and need no running services:
+
+```bash
+pip install -r hma/requirements-dev.txt
+PYTHONPATH=. python -m pytest hma/unit_tests/ -v
+```
+
 ## Performance Metrics & Visualizations
 
 After running tests with `EVAL_MODE=test`, metrics and graphs are **automatically generated** and saved to:
@@ -69,7 +86,7 @@ You can also compute metrics manually:
 **mAP (Mean Average Precision):**
 ```bash
 PYTHONPATH=. python hma/metrics/map.py \
-  --labels hma/resources/labels/images_series_labels.json \
+  --labels hma/image/resources/labels/images_series_labels.json \
   --pairwise results/evaluation_results/<timestamp>/pairwise_clip_compare.csv \
   --output_csv results/evaluation_results/<timestamp>/map_by_series.csv
 ```
@@ -77,7 +94,7 @@ PYTHONPATH=. python hma/metrics/map.py \
 **Classification Precision-Recall (threshold sweep):**
 ```bash
 PYTHONPATH=. python hma/metrics/precision_recall.py \
-  --labels hma/resources/labels/images_series_labels.json \
+  --labels hma/image/resources/labels/images_series_labels.json \
   --pairwise results/evaluation_results/<timestamp>/pairwise_clip_compare.csv \
   --output_csv precision_recall_results.csv \
   --output_plot precision_recall_curve.png
@@ -86,7 +103,7 @@ PYTHONPATH=. python hma/metrics/precision_recall.py \
 **Distance Distribution Histograms:**
 ```bash
 PYTHONPATH=. python hma/metrics/distance_distribution.py \
-  --labels hma/resources/labels/images_series_labels.json \
+  --labels hma/image/resources/labels/images_series_labels.json \
   --pairwise results/evaluation_results/<timestamp>/pairwise_clip_compare.csv \
   --output_plot distance_distribution.png \
   --signal_type clip
@@ -124,7 +141,7 @@ A **series** is a group of related images that should be recognized as similar b
 - The same scene with transformations (rotations, flips)
 - The same image with different filters applied
 
-Series are defined in `hma/resources/labels/images_series_labels.json`:
+Series are defined in `hma/image/resources/labels/images_series_labels.json`:
 
 ```json
 {
@@ -262,4 +279,4 @@ docker compose exec hma-postgresql psql -U postgres -d media_match -c "\dt"
 
 ## Description of the tests
 
-Refer to [EVALUATION_DESCRIPTION.md](EVALUATION_DESCRIPTION.md) for an overview of the tests.
+Refer to [image/EVALUATION_DESCRIPTION.md](image/EVALUATION_DESCRIPTION.md) for an overview of the tests.

@@ -4,7 +4,7 @@
 - **Goal**: For each image, fetch the top‑K most similar matches from the local content bank.
 - **How it works**: Iterates K from 1 to `MAX_K` (inclusive) and calls `Evaluator.match_local_content_topk(image_path, k, SIGNAL_TYPE)`, where `SIGNAL_TYPE` is read from the environment.
 - **Inputs**:
-  - Images discovered by `tests.test_utils.get_image_files()`; the directory is controlled by `IMAGE_INPUT_DIR` (env var). If unset, it falls back to `evaluate.image_input_dir` (commonly `resources/images/`).
+  - Images discovered by `get_image_files()` in `tests/test_utils.py`; the directory is controlled by `IMAGE_INPUT_DIR` (env var). If unset, it falls back to `evaluate.image_input_dir` (commonly `hma/image/resources/images/`).
   - Env vars:
     - `SIGNAL_TYPE` (default `clip_float` when running the test module directly; when run via `evaluate.py`, the parent sets this per signal type)
     - `MAX_K` (default `5`)
@@ -18,7 +18,7 @@
   - For `SIGNAL_TYPE=clip`: thresholds are integers from 0..`THRESHOLD_MAX` (inclusive) stepping by `THRESHOLD_STEP`.
   - For `SIGNAL_TYPE=clip_float`: thresholds are floats from 0.0..`THRESHOLD_MAX` using `numpy.linspace`.
 - **Inputs**:
-  - Images from `tests.test_utils.get_image_files()`; the directory is controlled by `IMAGE_INPUT_DIR` (env var). If unset, it falls back to `evaluate.image_input_dir`.
+  - Images from `get_image_files()` in `tests/test_utils.py`; the directory is controlled by `IMAGE_INPUT_DIR` (env var). If unset, it falls back to `evaluate.image_input_dir`.
   - Env vars:
     - `SIGNAL_TYPE` (default `clip_float` when running the test module directly; when run via `evaluate.py`, the parent sets this per signal type)
     - `THRESHOLD_MAX` (default `100` for `clip`, `1.0` for `clip_float`)
@@ -34,7 +34,7 @@
   - Compares all unique image pairs with `Evaluator.compare_hashes(hash1, hash2, signal_type=SIGNAL_TYPE)`.
   - Parses the compare result into a boolean `matched` and numeric `distance`.
 - **Inputs**:
-  - Images from `tests.test_utils.get_image_files()`; the directory is controlled by `IMAGE_INPUT_DIR` (env var). If unset, it falls back to `evaluate.image_input_dir`.
+  - Images from `get_image_files()` in `tests/test_utils.py`; the directory is controlled by `IMAGE_INPUT_DIR` (env var). If unset, it falls back to `evaluate.image_input_dir`.
   - Env vars:
     - `SIGNAL_TYPE` (default `clip_float` when running the test module directly; when run via `evaluate.py`, the parent sets this per signal type)
     - `OUTPUT_FILE` (default `pairwise_<signal_type>_compare.json`)

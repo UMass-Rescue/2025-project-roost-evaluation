@@ -5,32 +5,9 @@ import binascii
 import numpy as np
 from pathlib import Path
 from datetime import datetime
-from hma.series_labels_utils import get_image_files as _get_image_files
-from hma.tests.path_id_store import PathIdStore
+from hma.path_id_store import PathIdStore
 
 ANON_ENV_FLAG = "DEANONYMIZE_IMAGE_PATHS"
-
-def get_image_files(image_dir=None):
-    """Return sorted list of image file paths from the given directory (default: resources/images or $IMAGE_INPUT_DIR)."""
-    if image_dir is None:
-        image_dir = Path(os.environ.get("IMAGE_INPUT_DIR", "./resources/images"))
-    else:
-        image_dir = Path(image_dir)
-    return _get_image_files(image_dir)
-
-def hash_image(evaluator, image_path):
-    """Return the hash dict for a given image file using the Evaluator."""
-    return evaluator.hash_local_content(image_path)
-
-def hash_images_batch(evaluator, image_paths, signal_type=None, batch_size=32):
-    """Return list of hash dicts for multiple image files using batch hashing."""
-    return evaluator.hash_local_content_batch(
-        image_paths, signal_type=signal_type, batch_size=batch_size
-    )
-
-def match_image(evaluator, image_path):
-    """Return the match result dict for a given image file using the Evaluator."""
-    return evaluator.match_local_content(image_path)
 
 def get_results_dir():
     """Get the results directory path based on timestamp, creating it if needed."""
@@ -168,8 +145,6 @@ def write_results(results, filename):
     
     return str(output_path)
 
-
-
 def decode_clip_hex(hex_string: str) -> list[float] | None:
     """
     Convert HMA-style hex string (representing float32 vector) to a float list.
@@ -190,7 +165,6 @@ def cosine_distance_safe(vec1, vec2):
     except Exception as e:
         print(f"[ERROR] Failed distance computation: {e}")
         return None
-
 
 def decode_clip_hex_to_floats(hex_str: str) -> list[float]:
     print(f"[DEBUG] CLIP hex length: {len(hex_str)}")

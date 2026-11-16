@@ -17,6 +17,8 @@ Make sure you've completed the root [README.md](../README.md)'s "Quick Start"
   (`Dockerfile.hma`, `omm_config.py`, `resources/patches/`) and `unit_tests/`.
 - `hma/image/`: the image evaluation (`evaluate.py`, `tests/`, `resources/`).
   Commands are in [image/TEST_COMMANDS.md](image/TEST_COMMANDS.md).
+- `hma/video/`: the video evaluation, starting with frame sampling
+  ([video/README.md](video/README.md)).
 
 ## Run Tests
 

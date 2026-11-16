@@ -12,6 +12,7 @@ create-env:
 	$(PYTHON) -m venv $(VENV_DIR)
 	$(PIP) install --upgrade pip
 	$(PIP) install -r requirements.txt
+	$(PIP) install --no-deps -r requirements-scenedetect.txt
 
 activate-env: create-env
 	@echo "Environment ready in $(VENV_DIR)."

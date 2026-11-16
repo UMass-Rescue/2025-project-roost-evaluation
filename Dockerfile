@@ -9,6 +9,10 @@ WORKDIR /build
 COPY requirements.txt /build/
 RUN pip install --no-cache-dir -r requirements.txt
 
+# PySceneDetect without its non-headless OpenCV dependency, see requirements-scenedetect.txt
+COPY requirements-scenedetect.txt /build/
+RUN pip install --no-cache-dir --no-deps -r requirements-scenedetect.txt
+
 COPY hma/hma_client.py /build/hma/hma_client.py
 COPY hma/logging_utils.py /build/hma/logging_utils.py
 COPY hma/results_utils.py /build/hma/results_utils.py
@@ -18,6 +22,7 @@ COPY hma/image/evaluate.py /build/hma/image/evaluate.py
 COPY hma/image/series_labels_utils.py /build/hma/image/series_labels_utils.py
 COPY hma/image/tests/ /build/hma/image/tests/
 COPY hma/image/resources/ /build/hma/image/resources/
+COPY hma/video/ /build/hma/video/
 
 # Set default image directory, can be overridden at runtime
 ENV IMAGE_INPUT_DIR=/build/hma/image/resources/images

@@ -1,0 +1,5 @@
+# PySceneDetect declares the non-headless opencv-python (it needs GUI libraries the image
+# does not have), so it is installed with --no-deps. opencv-python-headless and its other
+# dependencies are in requirements.txt:
+#   pip install --no-deps -r requirements-scenedetect.txt
+scenedetect==0.7.3

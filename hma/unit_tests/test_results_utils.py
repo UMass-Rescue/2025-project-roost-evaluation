@@ -75,3 +75,46 @@ def test_decode_clip_hex():
     vec = np.array([1.0, -2.0], dtype=np.float32)
     assert results_utils.decode_clip_hex(vec.tobytes().hex()) == [1.0, -2.0]
     assert results_utils.decode_clip_hex("zz") is None
+
+
+def test_content_id_mapping_supports_a_separate_file_name(results_env):
+    results_utils.save_content_id_mapping({"1": "a.jpg"}, "clip_float")
+    path = results_utils.save_content_id_mapping({"7": "v.mp4"}, "clip_float", name="content_id_to_frame")
+    assert path.name == "content_id_to_frame_clip_float.json"
+    assert results_utils.load_content_id_mapping(path.parent, "clip_float", name="content_id_to_frame") == {"7": "v.mp4"}
+    # the default name still reads the image mapping, untouched by the other one
+    assert results_utils.load_content_id_mapping(path.parent, "clip_float") == {"1": "a.jpg"}
+
+
+def test_write_results_item_key_names_the_topk_columns():
+    results = [{"video": "/data/v1.mp4", "k": 1, "matches": [{"bank_content_id": 3, "distance": "0.2"}]}]
+    rows = _rows(results_utils.write_results(results, "topk_test_clip_float_results.csv", item_key="video"))
+    assert list(rows[0]) == ["video", "k", "bank_content_id", "distance"]
+    assert rows[0]["video"] == "1" and rows[0]["bank_content_id"] == "3"
+
+
+def test_write_results_item_key_names_the_pairwise_columns():
+    results = [{"video1": "v1.mp4", "video2": "v2.mp4", "matched": True, "distance": "0.1"}]
+    rows = _rows(results_utils.write_results(results, "pairwise_clip_float_compare.csv", item_key="video"))
+    assert list(rows[0]) == ["video1", "video2", "distance", "matched"]
+    assert rows[0]["video1"] != rows[0]["video2"]  # distinct anonymised ids, not the raw paths
+
+
+def test_item_key_only_anonymises_its_own_columns(monkeypatch):
+    # with item_key="video" an "image" entry is not a path to anonymise, so it is left alone
+    results = [{"video": "v.mp4", "image": "keep-as-is.jpg", "k": 1, "matches": []}]
+    store_paths = results_utils._collect_item_paths(results, "video")
+    assert store_paths == {"v.mp4"}
+    anonymised = results_utils._anonymize_results(results, {"v.mp4": "9"}, "video")
+    assert anonymised[0]["video"] == "9" and anonymised[0]["image"] == "keep-as-is.jpg"
+
+
+def test_missing_anonymised_id_is_an_error():
+    with pytest.raises(ValueError):
+        results_utils._anonymize_results([{"video": "v.mp4"}], {}, "video")
+
+
+def test_defaults_are_unchanged_for_the_image_evaluation():
+    results = [{"image1": "a.jpg", "image2": "b.jpg", "matched": False, "distance": "0.3"}]
+    rows = _rows(results_utils.write_results(results, "pairwise_clip_float_compare.csv"))
+    assert list(rows[0]) == ["image1", "image2", "distance", "matched"]

@@ -21,35 +21,37 @@ def get_results_dir():
     results_dir.mkdir(parents=True, exist_ok=True)
     return results_dir
 
-def save_content_id_mapping(content_id_to_image: dict, signal_type: str) -> Path:
+def save_content_id_mapping(content_id_to_image: dict, signal_type: str, name: str = "content_id_to_image") -> Path:
     """
     Save content_id -> image_path mapping to results directory.
     
     Args:
         content_id_to_image: Dict mapping content_id (str) -> image_path (str)
         signal_type: Signal type (e.g., 'clip_float')
+        name: File name stem, so other evaluations can keep their own mapping
     
     Returns:
         Path to the saved mapping file
     """
     results_dir = get_results_dir()
-    content_id_map_file = results_dir / f"content_id_to_image_{signal_type}.json"
+    content_id_map_file = results_dir / f"{name}_{signal_type}.json"
     with open(content_id_map_file, 'w') as f:
         json.dump(content_id_to_image, f, indent=2)
     return content_id_map_file
 
-def load_content_id_mapping(results_dir: Path, signal_type: str) -> dict:
+def load_content_id_mapping(results_dir: Path, signal_type: str, name: str = "content_id_to_image") -> dict:
     """
     Load content_id -> image_path mapping from results directory.
     
     Args:
         results_dir: Path to results directory
         signal_type: Signal type (e.g., 'clip_float')
+        name: File name stem used when the mapping was saved
     
     Returns:
         Dict mapping content_id (str) -> image_path (str), or empty dict if not found
     """
-    content_id_map_file = results_dir / f"content_id_to_image_{signal_type}.json"
+    content_id_map_file = results_dir / f"{name}_{signal_type}.json"
     if content_id_map_file.exists():
         try:
             with open(content_id_map_file, 'r') as f:
@@ -63,22 +65,26 @@ def _should_anonymize() -> bool:
     # Default ON; set DEANONYMIZE_IMAGE_PATHS=1 to disable anonymization
     return os.getenv(ANON_ENV_FLAG, "").strip() != "1"
 
-def _collect_image_paths(results: list[dict]) -> set[str]:
+def _item_keys(item_key: str) -> tuple[str, str, str]:
+    """Result keys holding a file path: the item itself, or either side of a pair."""
+    return (item_key, f"{item_key}1", f"{item_key}2")
+
+def _collect_item_paths(results: list[dict], item_key: str = "image") -> set[str]:
     paths: set[str] = set()
     for item in results:
         if not isinstance(item, dict):
             continue
-        for key in ("image", "image1", "image2"):
+        for key in _item_keys(item_key):
             val = item.get(key)
             if isinstance(val, str):
                 paths.add(val)
     return paths
 
-def _anonymize_results(results: list[dict], id_map: dict[str, str]) -> list[dict]:
+def _anonymize_results(results: list[dict], id_map: dict[str, str], item_key: str = "image") -> list[dict]:
     anonymized: list[dict] = []
     for item in results:
         new_item = item.copy()
-        for key in ("image", "image1", "image2"):
+        for key in _item_keys(item_key):
             val = new_item.get(key)
             if isinstance(val, str):
                 if val not in id_map:
@@ -94,25 +100,31 @@ def _validate_results_for_anonymization(results) -> None:
         if not isinstance(item, dict):
             raise TypeError(f"Anonymization expects dict items; found {type(item).__name__} at index {idx}.")
 
-def write_results(results, filename):
-    """Write results (list of dicts) to a CSV file in the timestamped results directory."""
+def write_results(results, filename, item_key="image"):
+    """Write results (list of dicts) to a CSV file in the timestamped results directory.
+
+    item_key names the result key (and CSV column) holding the queried file path:
+    "image" for the image evaluation, "video" for the video evaluation. Pairwise
+    results use "<item_key>1" and "<item_key>2".
+    """
     results_dir = get_results_dir()
     output_path = results_dir / filename.replace('.json', '.csv')
     results_to_write = results
 
     if _should_anonymize():
         _validate_results_for_anonymization(results)
-        paths = _collect_image_paths(results)
+        paths = _collect_item_paths(results, item_key)
         store = PathIdStore.from_env()
         id_map = store.get_ids_for_paths(paths)
-        results_to_write = _anonymize_results(results, id_map)
+        results_to_write = _anonymize_results(results, id_map, item_key)
         if store.has_persistence:
             store.save()
 
     # Write CSV instead of JSON
     is_pairwise = filename.startswith("pairwise_")
     if is_pairwise:
-        fieldnames = ["image1", "image2", "distance", "matched"]
+        key1, key2 = f"{item_key}1", f"{item_key}2"
+        fieldnames = [key1, key2, "distance", "matched"]
         rows = []
         for r in results_to_write:
             distance = r.get("distance")
@@ -123,18 +135,18 @@ def write_results(results, filename):
             if distance is not None and distance != "":
                 distance_str = str(distance)
                 rows.append({
-                    "image1": r.get("image1", ""), 
-                    "image2": r.get("image2", ""), 
+                    key1: r.get(key1, ""), 
+                    key2: r.get(key2, ""), 
                     "distance": distance_str, 
                     "matched": r.get("matched", False)
                 })
     else:
         param_name = "threshold" if "threshold" in filename else "k"
-        fieldnames = ["image", param_name, "bank_content_id", "distance"]
+        fieldnames = [item_key, param_name, "bank_content_id", "distance"]
         rows = []
         for r in results_to_write:
             for m in r.get("matches", []):
-                rows.append({"image": r.get("image", ""), param_name: r.get(param_name, ""),
+                rows.append({item_key: r.get(item_key, ""), param_name: r.get(param_name, ""),
                             "bank_content_id": m.get("bank_content_id", ""), 
                             "distance": m.get("distance", "")})
     

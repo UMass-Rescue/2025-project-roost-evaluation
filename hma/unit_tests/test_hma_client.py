@@ -117,6 +117,57 @@ class TestAddAndUpload:
 
 
 @patch("hma.hma_client.requests")
+class TestAddSignal:
+    def test_posts_the_signal_and_returns_the_content_id_as_a_string(self, requests_mock, client):
+        requests_mock.post.return_value = _response(json_data={"id": 12, "signals": {"clip_float": "ab"}})
+        assert client.add_signal_to_bank("B", "clip_float", "ab") == "12"
+        call = requests_mock.post.call_args
+        assert call.args[0].endswith("/c/bank/B/signal")
+        assert call.kwargs["json"] == {"clip_float": "ab"}
+
+    def test_failure_returns_none(self, requests_mock, client):
+        requests_mock.post.return_value = _response(ok=False, status_code=400, text="bad signal")
+        assert client.add_signal_to_bank("B", "clip_float", "zz") is None
+
+    def test_request_exception_returns_none(self, requests_mock, client):
+        requests_mock.post.side_effect = RequestException("down")
+        assert client.add_signal_to_bank("B", "clip_float", "ab") is None
+
+    def test_a_response_without_an_id_returns_none(self, requests_mock, client):
+        requests_mock.post.return_value = _response(json_data={})
+        assert client.add_signal_to_bank("B", "clip_float", "ab") is None
+
+
+@patch("hma.hma_client.requests")
+class TestHashImageBytes:
+    def test_returns_one_signal_per_image_in_order(self, requests_mock, client):
+        requests_mock.post.return_value = _response(json_data=[{"clip_float": "1"}, {"clip_float": "2"}])
+        assert client.hash_image_bytes([b"a", b"b"], "clip_float") == ["1", "2"]
+        call = requests_mock.post.call_args
+        assert [name for name, _ in call.kwargs["files"]] == ["photo", "photo"]
+        assert call.kwargs["params"] == {"signal_type": "clip_float"}
+
+    @pytest.mark.parametrize(
+        "response",
+        [
+            _response(ok=False, status_code=500, text="boom"),
+            _response(json_data=[{"clip_float": "1"}]),
+            _response(json_data={"clip_float": "1"}),
+            _response(json_data=[{"clip_float": "1"}, {"error": "bad image"}]),
+        ],
+    )
+    def test_any_failure_is_an_error(self, requests_mock, client, response):
+        requests_mock.post.return_value = response
+        with pytest.raises(RuntimeError):
+            client.hash_image_bytes([b"a", b"b"], "clip_float")
+
+    def test_request_exception_is_an_error(self, requests_mock, client):
+        requests_mock.post.side_effect = RequestException("down")
+        with pytest.raises(RuntimeError, match="down"):
+            client.hash_image_bytes([b"a"], "clip_float")
+
+
+@patch("hma.hma_client.requests")
 class TestHashing:
     def test_hash_local_content_returns_json(self, requests_mock, client, image):
         requests_mock.post.return_value = _response(json_data={"clip_float": "abcd"})

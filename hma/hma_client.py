@@ -168,6 +168,42 @@ class HMAClient:
                     fh.close()
         return all_results
 
+    def hash_image_bytes(self, images: list[bytes], signal_type: str) -> list[str]:
+        """Hash in-memory images (JPEG or PNG bytes) in one /h/hash/batch request.
+
+        Returns one signal string per image, in input order. Raises RuntimeError on any failure,
+        because a caller that needs every hash cannot carry on without one.
+        """
+        files = [("photo", (f"{i}.jpg", image)) for i, image in enumerate(images)]
+        try:
+            response = requests.post(hash_batch_url, files=files, params={"signal_type": signal_type})
+        except RequestException as e:
+            raise RuntimeError(f"Hashing request failed: {e}") from e
+        if not response.ok:
+            raise RuntimeError(f"Hashing failed: {response.status_code} - {response.text[:200]}")
+        results = response.json()
+        if not isinstance(results, list) or len(results) != len(images):
+            raise RuntimeError(f"Hashing returned an unexpected response for {len(images)} images")
+        signals = []
+        for result in results:
+            if not isinstance(result, dict) or signal_type not in result:
+                raise RuntimeError(f"Hashing returned no {signal_type} signal: {str(result)[:200]}")
+            signals.append(result[signal_type])
+        return signals
+
+    def add_signal_to_bank(self, bank_name: str, signal_type: str, signal: str) -> str | None:
+        """Add an already computed signal to a bank. Returns the new bank content id, or None on failure."""
+        try:
+            response = requests.post(f"{hma_app_url}/c/bank/{bank_name}/signal", json={signal_type: signal})
+        except RequestException as e:
+            _log_error(f"Request exception while adding a signal to bank {bank_name}: {e}")
+            return None
+        if not response.ok:
+            _log_error(f"Failed to add a signal to bank {bank_name}: {response.status_code} - {response.text}")
+            return None
+        content_id = response.json().get("id")
+        return None if content_id is None else str(content_id)
+
     def match_with_signal_topk(self, signal: str, k: int, signal_type: str) -> dict:
         """Look up top-k matches using a pre-computed hash signal."""
         data = {

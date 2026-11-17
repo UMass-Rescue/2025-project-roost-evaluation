@@ -12,7 +12,8 @@ source video.
 This folder currently holds the steps that turn a video into the frames to hash: choosing
 candidate frames ([frames.py](frames.py)), filtering out low-information ones
 ([quality.py](quality.py)), removing repeats ([dedupe.py](dedupe.py)), and the
-[pipeline](pipeline.py) that runs them in order.
+[pipeline](pipeline.py) that runs them in order. [frame_index.py](frame_index.py) stores the
+frames in an HMA bank and scores a query video against it.
 
 ## Frame sampling
 
@@ -137,6 +138,35 @@ cannot use it up.
 reason, slices dropped, pixel and embedding duplicates, frames thinned to the cap, and frames
 kept. A video with nothing usable returns no frames and `report.no_usable_frames` is true, so
 the caller can tell the user.
+
+## Indexing and scoring
+
+[frame_index.py](frame_index.py) connects the pipeline to HMA. HMA hashes the frames with its
+CLIP image signal (`clip_float`), and each kept frame is added to a bank as a precomputed hash,
+one bank item per frame. The bank does not remember which video an item came from, so
+`index_videos` returns a `VideoIndex` that does (and holds each video's frame embeddings).
+A video with no usable frame is listed in `VideoIndex.unusable` and left out.
+
+A query video is scored against every other video: each of its frames is looked up, and a
+candidate's score is the share of the query's frames that matched at least one of the
+candidate's frames within a distance. The query's own video is never scored.
+
+```python
+from hma.hma_client import HMAClient
+from hma.video.frame_index import index_videos, lookup_frames, video_scores
+
+client = HMAClient()
+client.setup_bank("VIDEOS")
+index = index_videos(client, "VIDEOS", ["a.mp4", "b.mp4", "c.mp4"])  # needs a running HMA
+
+query = "a.mp4"
+matches = lookup_frames(client, index.embeddings[query], max_distance=0.3)
+for distance in (0.1, 0.2, 0.3):  # one lookup serves every smaller distance
+    print(distance, video_scores(matches, index.frames, distance, exclude_video=query))
+```
+
+HMA builds its search index in the background, so wait for it to include the new frames
+(`HMAClient.wait_for_index_update`) before looking anything up.
 
 Try the sampling on a video (a 3 s clip with no cut gives three frames, at 0.5 s, 1.5 s and 2.5 s):
 

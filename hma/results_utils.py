@@ -100,6 +100,20 @@ def _validate_results_for_anonymization(results) -> None:
         if not isinstance(item, dict):
             raise TypeError(f"Anonymization expects dict items; found {type(item).__name__} at index {idx}.")
 
+def read_csv_rows(path) -> list[dict]:
+    """The rows of a CSV file with a header, as dicts of strings."""
+    with open(path, newline="") as f:
+        return list(csv.DictReader(f))
+
+
+def write_csv_rows(path, rows) -> None:
+    """Write dict rows (at least one) to a CSV file whose header is the first row's keys."""
+    with open(path, "w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=list(rows[0]))
+        writer.writeheader()
+        writer.writerows(rows)
+
+
 def write_results(results, filename, item_key="image"):
     """Write results (list of dicts) to a CSV file in the timestamped results directory.
 

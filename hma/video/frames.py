@@ -5,11 +5,10 @@ sampled at most every `max_frame_gap_seconds`, taking the midpoint of each
 slice, so scene-aware sampling and uniform sampling are the same code path:
 with the detector set to "none" the whole video is a single scene.
 
-This module is self-contained (no evaluation imports) so it can move into a
-package of its own later.
+This module imports nothing from the evaluation beyond hma.video.env, so it can move
+into a package of its own later.
 """
 import math
-import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, Iterator, List, Optional, Sequence, Tuple
@@ -17,13 +16,13 @@ from typing import Iterable, Iterator, List, Optional, Sequence, Tuple
 import cv2
 import numpy as np
 
+from hma.video.env import env_value
+
 SCENE_DETECTORS = ("content", "adaptive", "none")
 
 # Detector sensitivity used when none is given. The adaptive value is lower than
-# PySceneDetect's own 3.0: on real clips spliced together at known cut positions
-# (6 fps, hard cuts) 2.0 found 95% of the cuts at 95% precision, while 3.0 found 73%
-# and "content" at its default 27.0 found 83% at 80% precision. Revisit with footage
-# that has dissolves or a different frame rate.
+# PySceneDetect's own 3.0 because it found more of the cuts in real clips spliced at
+# known positions (see the README). Revisit with dissolves or another frame rate.
 DEFAULT_SCENE_THRESHOLDS = {"content": 27.0, "adaptive": 2.0}
 
 
@@ -68,22 +67,12 @@ class SamplingConfig:
         VIDEO_MAX_FRAME_GAP_SECONDS and VIDEO_CANDIDATE_WINDOW_SECONDS; unset or empty
         values keep the defaults."""
         defaults = cls()
-
-        def env(name):
-            value = os.getenv(name, "").strip()
-            return value or None
-
-        threshold = env("VIDEO_SCENE_THRESHOLD")
         return cls(
-            scene_detector=(env("VIDEO_SCENE_DETECTOR") or defaults.scene_detector).lower(),
-            scene_threshold=float(threshold) if threshold is not None else None,
-            min_scene_seconds=float(env("VIDEO_MIN_SCENE_SECONDS") or defaults.min_scene_seconds),
-            max_frame_gap_seconds=float(
-                env("VIDEO_MAX_FRAME_GAP_SECONDS") or defaults.max_frame_gap_seconds
-            ),
-            candidate_window_seconds=float(
-                env("VIDEO_CANDIDATE_WINDOW_SECONDS") or defaults.candidate_window_seconds
-            ),
+            scene_detector=env_value("VIDEO_SCENE_DETECTOR", defaults.scene_detector, str).lower(),
+            scene_threshold=env_value("VIDEO_SCENE_THRESHOLD", None),
+            min_scene_seconds=env_value("VIDEO_MIN_SCENE_SECONDS", defaults.min_scene_seconds),
+            max_frame_gap_seconds=env_value("VIDEO_MAX_FRAME_GAP_SECONDS", defaults.max_frame_gap_seconds),
+            candidate_window_seconds=env_value("VIDEO_CANDIDATE_WINDOW_SECONDS", defaults.candidate_window_seconds),
         )
 
 

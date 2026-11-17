@@ -23,7 +23,6 @@ FRAMES = {
     "5": FrameRef("d", 0, 0.5),
 }
 VIDEOS = ["a", "b", "c", "d"]
-NAMES = {v: v.upper() for v in VIDEOS}
 
 
 class TestDistanceGrid:
@@ -122,29 +121,29 @@ MATCHES = {
 
 
 class TestRankingsAt:
-    def test_ranks_every_other_video_under_both_rankings_using_the_names(self):
-        result = rankings_at(MATCHES, FRAMES, VIDEOS, NAMES, 0.1)
+    def test_ranks_every_other_video_under_both_rankings(self):
+        result = rankings_at(MATCHES, FRAMES, VIDEOS, 0.1)
         assert set(result) == {SCORE_ONLY, CLOSEST_FRAME}
         for ranked in result.values():
-            assert set(ranked) == {"A", "B", "C", "D"}
-            assert sorted(v for v, _ in ranked["A"]) == ["B", "C", "D"]
+            assert set(ranked) == {"a", "b", "c", "d"}
+            assert sorted(v for v, _ in ranked["a"]) == ["b", "c", "d"]
 
     def test_the_second_item_is_one_minus_the_score(self):
-        ranked = rankings_at(MATCHES, FRAMES, VIDEOS, NAMES, 0.1)[CLOSEST_FRAME]
-        assert ranked["A"][0] == ("B", pytest.approx(0.5))  # one of a's two frames is within 0.1 of b
-        assert dict(ranked["A"])["C"] == 1.0  # c is 0.12 away, outside 0.1
+        ranked = rankings_at(MATCHES, FRAMES, VIDEOS, 0.1)[CLOSEST_FRAME]
+        assert ranked["a"][0] == ("b", pytest.approx(0.5))  # one of a's two frames is within 0.1 of b
+        assert dict(ranked["a"])["c"] == 1.0  # c is 0.12 away, outside 0.1
 
     def test_a_larger_distance_finds_more(self):
-        wide = dict(rankings_at(MATCHES, FRAMES, VIDEOS, NAMES, 0.15)[CLOSEST_FRAME]["A"])
-        assert wide["C"] == pytest.approx(0.5)
+        wide = dict(rankings_at(MATCHES, FRAMES, VIDEOS, 0.15)[CLOSEST_FRAME]["a"])
+        assert wide["c"] == pytest.approx(0.5)
 
     def test_a_query_with_no_frames_ranks_everything_at_distance_one(self):
-        ranked = rankings_at(MATCHES, FRAMES, VIDEOS, NAMES, 0.1)[SCORE_ONLY]["D"]
-        assert sorted(v for v, _ in ranked) == ["A", "B", "C"] and {d for _, d in ranked} == {1.0}
+        ranked = rankings_at(MATCHES, FRAMES, VIDEOS, 0.1)[SCORE_ONLY]["d"]
+        assert sorted(v for v, _ in ranked) == ["a", "b", "c"] and {d for _, d in ranked} == {1.0}
 
     def test_the_closest_frame_ranking_orders_unmatched_videos_by_their_closest_frame(self):
-        ranked = rankings_at(MATCHES, FRAMES, VIDEOS, NAMES, 0.05)[CLOSEST_FRAME]["A"]
-        assert [v for v, _ in ranked] == ["B", "C", "D"]  # only b is within 0.05; c is closer than d
+        ranked = rankings_at(MATCHES, FRAMES, VIDEOS, 0.05)[CLOSEST_FRAME]["a"]
+        assert [v for v, _ in ranked] == ["b", "c", "d"]  # only b is within 0.05; c is closer than d
 
 
 class TestMeanMap:
@@ -166,12 +165,12 @@ class TestMeanMap:
 
 class TestScorePairs:
     def test_every_query_is_paired_with_every_other_video_including_unmatched_ones(self):
-        pairs = list(score_pairs(MATCHES, FRAMES, VIDEOS, NAMES, 0.1))
+        pairs = list(score_pairs(MATCHES, FRAMES, VIDEOS, 0.1))
         assert len(pairs) == 4 * 3
-        assert ("A", "B", pytest.approx(0.5)) in pairs
-        assert ("A", "D", 1.0) in pairs
+        assert ("a", "b", pytest.approx(0.5)) in pairs
+        assert ("a", "d", 1.0) in pairs
         assert not any(a == b for a, b, _ in pairs)
 
     def test_only_the_given_queries_are_used(self):
-        pairs = list(score_pairs(MATCHES, FRAMES, VIDEOS, NAMES, 0.1, queries=["b"]))
-        assert {a for a, _, _ in pairs} == {"B"} and len(pairs) == 3
+        pairs = list(score_pairs(MATCHES, FRAMES, VIDEOS, 0.1, queries=["b"]))
+        assert {a for a, _, _ in pairs} == {"b"} and len(pairs) == 3

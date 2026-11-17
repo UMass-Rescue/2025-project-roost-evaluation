@@ -1,12 +1,12 @@
 """Tests for hma.video.smoke_test, with a stand-in for HMA."""
 
-import csv
 import hashlib
 
 import cv2
 import numpy as np
 import pytest
 
+from hma.results_utils import read_csv_rows, write_csv_rows
 from hma.video import evaluate, smoke_test
 from hma.video.evaluate import EvaluationConfig
 from hma.video.frame_index import encode_signal
@@ -97,11 +97,8 @@ class TestCheckResults:
 
     def test_a_match_curve_without_a_precise_point_is_reported(self, summary):
         path = summary["results_dir"] / "match_precision_recall_clip_float_results.csv"
-        curve = smoke_test._rows(path)
+        curve = read_csv_rows(path)
         for row in curve:
             row["precision"] = "0.5"
-        with open(path, "w", newline="") as f:
-            writer = csv.DictWriter(f, fieldnames=list(curve[0]))
-            writer.writeheader()
-            writer.writerows(curve)
+        write_csv_rows(path, curve)
         assert any("match curve" in p for p in smoke_test.check_results(summary, EvaluationConfig()))

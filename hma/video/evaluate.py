@@ -5,22 +5,22 @@ bank, and each video is then used as a query against the others (leave one out).
 report mAP and precision/recall; see hma/video/README.md for what each one measures.
 """
 
-import csv
 import os
 import time
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Mapping, Sequence
+from typing import Mapping, NamedTuple, Sequence
 
 from hma.hma_client import HMAClient
 from hma.logging_utils import _log_info, _log_warning, get_log_file, setup_logging
-from hma.metrics.common import classify_pairs_by_series, normalize_pairwise_path
+from hma.metrics.common import classify_pairs_by_series
 from hma.metrics.distance_distribution import compute_distance_distribution_from_labeled
 from hma.metrics.map import compute_map_from_rankings
 from hma.metrics.precision_recall import compute_precision_recall_from_labeled
-from hma.results_utils import get_results_dir, save_content_id_mapping, write_results
+from hma.results_utils import get_results_dir, save_content_id_mapping, write_csv_rows, write_results
 from hma.video import retrieval
+from hma.video.env import env_value
 from hma.video.frame_index import VideoIndex, index_videos, lookup_frames, wait_until_searchable
 from hma.video.pairwise import distance_pairs, video_distances
 from hma.video.series_labels_utils import find_video_series, get_video_files
@@ -63,19 +63,14 @@ class EvaluationConfig:
         """Read VIDEO_FRAME_DISTANCE, VIDEO_DISTANCE_MAX, VIDEO_DISTANCE_STEP, MAX_K,
         VIDEO_TEST_FRACTION, VIDEO_SPLIT_SEED and MAX_WORKERS; unset or empty values keep the defaults."""
         defaults = cls()
-
-        def env(name, default, cast):
-            value = os.getenv(name, "").strip()
-            return cast(value) if value else default
-
         return cls(
-            frame_distance=env("VIDEO_FRAME_DISTANCE", defaults.frame_distance, float),
-            distance_max=env("VIDEO_DISTANCE_MAX", defaults.distance_max, float),
-            distance_step=env("VIDEO_DISTANCE_STEP", defaults.distance_step, float),
-            max_k=env("MAX_K", defaults.max_k, int),
-            test_fraction=env("VIDEO_TEST_FRACTION", defaults.test_fraction, float),
-            seed=env("VIDEO_SPLIT_SEED", defaults.seed, int),
-            max_workers=env("MAX_WORKERS", defaults.max_workers, int),
+            frame_distance=env_value("VIDEO_FRAME_DISTANCE", defaults.frame_distance),
+            distance_max=env_value("VIDEO_DISTANCE_MAX", defaults.distance_max),
+            distance_step=env_value("VIDEO_DISTANCE_STEP", defaults.distance_step),
+            max_k=env_value("MAX_K", defaults.max_k, int),
+            test_fraction=env_value("VIDEO_TEST_FRACTION", defaults.test_fraction),
+            seed=env_value("VIDEO_SPLIT_SEED", defaults.seed, int),
+            max_workers=env_value("MAX_WORKERS", defaults.max_workers, int),
         )
 
     @property
@@ -88,11 +83,23 @@ class EvaluationConfig:
         return max(self.grid[-1], self.frame_distance)
 
 
-def _write_csv(path: Path, rows: Sequence[Mapping]) -> None:
-    with open(path, "w", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=list(rows[0]))
-        writer.writeheader()
-        writer.writerows(rows)
+class Selection(NamedTuple):
+    """The frame distance chosen on the train series, and the videos of the held-out test series."""
+
+    distance: float
+    test_videos: set[str]
+
+
+@dataclass(frozen=True)
+class _Data:
+    """What the suites share: the dataset, what was indexed, the lookups made, and where results go."""
+
+    videos: Sequence[str]
+    series_to_videos: Mapping[str, set[str]]
+    index: VideoIndex
+    matches: Mapping[str, list]
+    config: EvaluationConfig
+    results_dir: Path
 
 
 def _map_columns(maps: Sequence[float]) -> dict[str, str]:
@@ -105,18 +112,13 @@ def evaluate(
     videos: Sequence[str],
     series: Mapping[str, Sequence[str]],
     config: EvaluationConfig,
-) -> dict:
+) -> Selection:
     """Run the three suites on videos already indexed in the bank and write their results.
 
     videos are all the videos of the dataset, including any the index could not use: those can
-    never be found, which the metrics count against the result. Returns a summary of the choices made.
+    never be found, which the metrics count against the result. Videos are told apart by the
+    strings in videos and series, which must be the same for the same video.
     """
-    names = {video: normalize_pairwise_path(video) for video in videos}
-    if len(set(names.values())) != len(names):
-        raise ValueError("Two videos have the same normalised path.")
-    series_to_videos = {name: {names[v] for v in members} for name, members in series.items()}
-    results_dir = get_results_dir()
-
     _log_info(f"Looking up the frames of {len(index.embeddings)} videos at distance {config.lookup_distance}...")
     started = time.time()
     matches = {
@@ -127,117 +129,123 @@ def evaluate(
     }
     _log_info(f"Lookups took {time.time() - started:.1f}s")
 
-    chosen = _retrieval_suite(matches, index, videos, names, series_to_videos, config, results_dir)
-    _match_suite(matches, index, videos, names, series_to_videos, config, chosen, results_dir)
-    _pairwise_suite(index, names, series_to_videos, config, results_dir)
-    return chosen
+    data = _Data(
+        videos=videos,
+        series_to_videos={name: set(members) for name, members in series.items()},
+        index=index,
+        matches=matches,
+        config=config,
+        results_dir=get_results_dir(),
+    )
+    selection = _retrieval_suite(data)
+    _match_suite(data, selection)
+    _pairwise_suite(data)
+    return selection
 
 
-def _retrieval_suite(matches, index, videos, names, series_to_videos, config, results_dir) -> dict:
+def _retrieval_suite(data: _Data) -> Selection:
     """mAP over the frame distances, for both rankings, on all series and on the train and test halves."""
-    train, test = retrieval.split_series(series_to_videos, config.test_fraction, config.seed)
-    subsets = {"all": set(series_to_videos), "train": train, "test": test}
-    cache: dict[float, dict] = {}
+    config = data.config
+    train, test = retrieval.split_series(data.series_to_videos, config.test_fraction, config.seed)
+    subsets = {"all": set(data.series_to_videos), "train": train, "test": test}
 
-    def at(distance: float) -> dict:
-        """The rankings and mAP@k at one frame distance."""
-        if distance not in cache:
-            rankings = retrieval.rankings_at(matches, index.frames, videos, names, distance, config.seed)
-            cache[distance] = {
-                "rankings": rankings,
-                "maps": {
-                    (ranking, subset): retrieval.mean_map(
-                        {s: series_to_videos[s] for s in members}, ranked, config.max_k
-                    )
-                    for ranking, ranked in rankings.items()
-                    for subset, members in subsets.items()
-                },
-            }
-        return cache[distance]
+    maps = {}  # frame distance -> (ranking, series group) -> mAP@1..max_k
+    headline_rankings = {}
+    for distance in dict.fromkeys([*config.grid, config.frame_distance]):
+        rankings = retrieval.rankings_at(data.matches, data.index.frames, data.videos, distance, config.seed)
+        maps[distance] = {
+            (ranking, group): retrieval.mean_map(
+                {s: data.series_to_videos[s] for s in members}, ranked, config.max_k
+            )
+            for ranking, ranked in rankings.items()
+            for group, members in subsets.items()
+        }
+        if distance == config.frame_distance:
+            headline_rankings = rankings  # only these are kept; the others are not needed after their mAP
 
-    rows = [
-        {"frame_distance": d, "ranking": ranking, "series": subset, **_map_columns(maps)}
-        for d in config.grid
-        for (ranking, subset), maps in at(d)["maps"].items()
-    ]
-    _write_csv(results_dir / f"retrieval_sweep_{SIGNAL_TYPE}_results.csv", rows)
+    write_csv_rows(
+        data.results_dir / f"retrieval_sweep_{SIGNAL_TYPE}_results.csv",
+        [
+            {"frame_distance": d, "ranking": ranking, "series": group, **_map_columns(values)}
+            for d in config.grid
+            for (ranking, group), values in maps[d].items()
+        ],
+    )
+    for ranking, ranked in headline_rankings.items():
+        compute_map_from_rankings(
+            data.series_to_videos, ranked, str(data.results_dir / f"map_by_series_{ranking}_{SIGNAL_TYPE}_results.csv")
+        )
 
-    headline = config.frame_distance
-    for ranking, ranked in at(headline)["rankings"].items():
-        compute_map_from_rankings(series_to_videos, ranked, str(results_dir / f"map_by_series_{ranking}_{SIGNAL_TYPE}_results.csv"))
+    def select_map(distance: float, group: str) -> float:
+        return maps[distance][(retrieval.SCORE_ONLY, group)][SELECT_K - 1]
 
+    selected = max(config.grid, key=lambda d: select_map(d, "train"))
     train_key, test_key = f"train_map@{SELECT_K}", f"test_map@{SELECT_K}"
-
-    def selection_map(d: float, subset: str) -> float:
-        return at(d)["maps"][(retrieval.SCORE_ONLY, subset)][SELECT_K - 1]
-
-    selected = max(config.grid, key=lambda d: selection_map(d, "train"))
-    summary_rows = [
+    choices = [
         {
             "choice": choice,
             "frame_distance": d,
-            train_key: f"{selection_map(d, 'train'):.6f}",
-            test_key: f"{selection_map(d, 'test'):.6f}",
+            train_key: f"{select_map(d, 'train'):.6f}",
+            test_key: f"{select_map(d, 'test'):.6f}",
         }
-        for choice, d in (("default", headline), ("selected on train", selected))
+        for choice, d in (("default", config.frame_distance), ("selected on train", selected))
     ]
-    _write_csv(results_dir / f"frame_distance_choice_{SIGNAL_TYPE}_results.csv", summary_rows)
+    write_csv_rows(data.results_dir / f"frame_distance_choice_{SIGNAL_TYPE}_results.csv", choices)
 
-    print(f"  Retrieval: {len(subsets['train'])} train and {len(subsets['test'])} test series")
+    print(f"  Retrieval: {len(train)} train and {len(test)} test series")
     for ranking, title in ((retrieval.SCORE_ONLY, "score only"), (retrieval.CLOSEST_FRAME, "score then closest frame")):
-        by_distance = ", ".join(f"d={d}: {at(d)['maps'][(ranking, 'all')][SELECT_K - 1]:.3f}" for d in config.grid)
+        by_distance = ", ".join(f"d={d}: {maps[d][(ranking, 'all')][SELECT_K - 1]:.3f}" for d in config.grid)
         print(f"  mAP@{SELECT_K}, {title}: {by_distance}")
-    for row in summary_rows:
+    for row in choices:
         print(f"  {row['choice']}: d={row['frame_distance']}, train mAP@{SELECT_K} {row[train_key]}, test {row[test_key]}")
-    return {"selected_distance": selected, "test_videos": {v for s in subsets["test"] for v in series_to_videos[s]}}
+    return Selection(selected, {v for s in test for v in data.series_to_videos[s]})
 
 
-def _match_suite(matches, index, videos, names, series_to_videos, config, chosen, results_dir) -> None:
+def _match_suite(data: _Data, selection: Selection) -> None:
     """Precision/recall of calling two videos a match, sweeping the score at a fixed frame distance."""
-    test_queries = [v for v in videos if names[v] in chosen["test_videos"]]
-    runs = (
-        ("", config.frame_distance, None),
-        ("selected_", chosen["selected_distance"], test_queries),
-    )
+    test_queries = [v for v in data.videos if v in selection.test_videos]
+    runs = (("", data.config.frame_distance, None), ("selected_", selection.distance, test_queries))
     for label, distance, queries in runs:
-        pairs = retrieval.score_pairs(matches, index.frames, videos, names, distance, queries)
-        labeled = classify_pairs_by_series(series_to_videos, pairs)
-        csv_path = results_dir / f"match_precision_recall_{label}{SIGNAL_TYPE}_results.csv"
+        pairs = retrieval.score_pairs(data.matches, data.index.frames, data.videos, distance, queries)
+        labeled = classify_pairs_by_series(data.series_to_videos, pairs, normalize=str)
+        csv_path = data.results_dir / f"match_precision_recall_{label}{SIGNAL_TYPE}_results.csv"
         compute_precision_recall_from_labeled(
             labeled, str(csv_path), str(csv_path).replace("_results.csv", "_curve.png"), SIGNAL_TYPE
         )
         print(f"  Match precision/recall at d={distance}" + (" (test series only)" if queries else "") + f": {csv_path.name}")
 
 
-def _pairwise_suite(index, names, series_to_videos, config, results_dir) -> None:
+def _pairwise_suite(data: _Data) -> None:
     """Distances between videos computed from the embeddings alone: mAP, precision/recall and their distribution."""
-    if len(index.embeddings) < 2:
+    if len(data.index.embeddings) < 2:
         _log_warning("Fewer than two videos have frames, so there is nothing to compare pairwise.")
         return
-    videos, matrix = video_distances(index.embeddings)
+    videos, matrix = video_distances(data.index.embeddings)
     pairs = list(distance_pairs(videos, matrix))
     write_results(
         [
-            {"video1": a, "video2": b, "distance": distance, "matched": distance <= config.frame_distance}
+            {"video1": a, "video2": b, "distance": distance, "matched": distance <= data.config.frame_distance}
             for a, b, distance in pairs
         ],
         f"pairwise_{SIGNAL_TYPE}_compare.csv",
         item_key="video",
     )
     rankings = {
-        names[video]: [(names[videos[j]], float(matrix[i, j])) for j in matrix[i].argsort(kind="stable") if j != i]
+        video: [(videos[j], float(matrix[i, j])) for j in matrix[i].argsort(kind="stable") if j != i]
         for i, video in enumerate(videos)
     }
-    compute_map_from_rankings(series_to_videos, rankings, str(results_dir / f"map_by_series_pairwise_{SIGNAL_TYPE}_results.csv"))
-    labeled = classify_pairs_by_series(series_to_videos, ((names[a], names[b], d) for a, b, d in pairs))
+    compute_map_from_rankings(
+        data.series_to_videos, rankings, str(data.results_dir / f"map_by_series_pairwise_{SIGNAL_TYPE}_results.csv")
+    )
+    labeled = classify_pairs_by_series(data.series_to_videos, pairs, normalize=str)
     compute_precision_recall_from_labeled(
         labeled,
-        str(results_dir / f"precision_recall_{SIGNAL_TYPE}_results.csv"),
-        str(results_dir / f"precision_recall_{SIGNAL_TYPE}_curve.png"),
+        str(data.results_dir / f"precision_recall_{SIGNAL_TYPE}_results.csv"),
+        str(data.results_dir / f"precision_recall_{SIGNAL_TYPE}_curve.png"),
         SIGNAL_TYPE,
     )
     compute_distance_distribution_from_labeled(
-        labeled, str(results_dir / f"distance_distribution_{SIGNAL_TYPE}.png"), SIGNAL_TYPE
+        labeled, str(data.results_dir / f"distance_distribution_{SIGNAL_TYPE}.png"), SIGNAL_TYPE
     )
     print(f"  Pairwise: {len(pairs)} video pairs")
 

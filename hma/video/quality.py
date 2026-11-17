@@ -12,7 +12,6 @@ frames at all, and the report says so, so that a caller can tell the user.
 This module is self-contained (apart from the frame type) so it can move into a package
 of its own later.
 """
-import os
 from collections import Counter
 from dataclasses import dataclass, field
 from typing import Iterable, Iterator, List, Optional, Sequence, Tuple
@@ -20,6 +19,7 @@ from typing import Iterable, Iterator, List, Optional, Sequence, Tuple
 import cv2
 import numpy as np
 
+from hma.video.env import env_value
 from hma.video.frames import SampledFrame
 
 FLAT = "flat"
@@ -58,16 +58,11 @@ class QualityConfig:
         """Read VIDEO_QUALITY_ANALYSIS_WIDTH, VIDEO_FLAT_STD_MAX, VIDEO_BARS_ROW_DIFF_MAX and
         VIDEO_BLUR_MIN; unset or empty values keep the defaults."""
         defaults = cls()
-
-        def env(name, default, kind=float):
-            value = os.getenv(name, "").strip()
-            return kind(value) if value else default
-
         return cls(
-            analysis_width=env("VIDEO_QUALITY_ANALYSIS_WIDTH", defaults.analysis_width, int),
-            flat_std_max=env("VIDEO_FLAT_STD_MAX", defaults.flat_std_max),
-            bars_row_diff_max=env("VIDEO_BARS_ROW_DIFF_MAX", defaults.bars_row_diff_max),
-            blur_min=env("VIDEO_BLUR_MIN", defaults.blur_min),
+            analysis_width=env_value("VIDEO_QUALITY_ANALYSIS_WIDTH", defaults.analysis_width, int),
+            flat_std_max=env_value("VIDEO_FLAT_STD_MAX", defaults.flat_std_max),
+            bars_row_diff_max=env_value("VIDEO_BARS_ROW_DIFF_MAX", defaults.bars_row_diff_max),
+            blur_min=env_value("VIDEO_BLUR_MIN", defaults.blur_min),
         )
 
 

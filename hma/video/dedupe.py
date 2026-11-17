@@ -12,12 +12,13 @@ In both steps the first frame of a group of near-duplicates wins, and each frame
 with every frame kept so far, so duplicates need not be adjacent. This module is
 self-contained so it can move into a package of its own later.
 """
-import os
 from dataclasses import dataclass
 from typing import List, Optional, Sequence, TypeVar
 
 import cv2
 import numpy as np
+
+from hma.video.env import env_value
 
 T = TypeVar("T")
 
@@ -47,16 +48,9 @@ class DedupeConfig:
         """Read VIDEO_DEDUPE_PIXEL_DIFF_MAX and VIDEO_DEDUPE_EMBEDDING_DISTANCE_MAX;
         unset or empty values keep the defaults."""
         defaults = cls()
-
-        def env(name, default):
-            value = os.getenv(name, "").strip()
-            return float(value) if value else default
-
         return cls(
-            pixel_diff_max=env("VIDEO_DEDUPE_PIXEL_DIFF_MAX", defaults.pixel_diff_max),
-            embedding_distance_max=env(
-                "VIDEO_DEDUPE_EMBEDDING_DISTANCE_MAX", defaults.embedding_distance_max
-            ),
+            pixel_diff_max=env_value("VIDEO_DEDUPE_PIXEL_DIFF_MAX", defaults.pixel_diff_max),
+            embedding_distance_max=env_value("VIDEO_DEDUPE_EMBEDDING_DISTANCE_MAX", defaults.embedding_distance_max),
         )
 
 

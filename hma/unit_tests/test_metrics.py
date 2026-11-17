@@ -69,6 +69,12 @@ class TestClassifyPairs:
         pairs = [("./a1", "/a2", 0.1), ("a1", "unlabelled", 0.4)]
         assert classify_pairs_by_series(SERIES, pairs) == [(0.1, True)]
 
+    def test_items_can_be_taken_exactly_as_they_are(self):
+        series = {"s": {"./a/1.mp4", "./a/2.mp4"}}
+        pairs = [("./a/1.mp4", "./a/2.mp4", 0.2)]
+        assert classify_pairs_by_series(series, pairs, normalize=str) == [(0.2, True)]
+        assert classify_pairs_by_series(series, pairs) == []  # the default would have rewritten the paths
+
     def test_pairwise_entries_version_agrees_and_applies_the_anon_map(self):
         entries = [{"image1": "1", "image2": "2", "distance": "0.25"}]
         by_entries = classify_pairwise_by_series(SERIES, entries, {"1": "a1", "2": "b2"})

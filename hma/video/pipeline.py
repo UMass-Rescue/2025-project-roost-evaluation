@@ -10,7 +10,6 @@ how they are made (the evaluation gets them from HMA's CLIP signal). The functio
 JPEG bytes, in the same encoding the frames would be uploaded in, and returns one vector per
 frame.
 """
-import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, List, Optional, Sequence
@@ -19,6 +18,7 @@ import cv2
 import numpy as np
 
 from hma.video.dedupe import DedupeConfig, FrameDeduper, thin_evenly, thumbnail
+from hma.video.env import env_value
 from hma.video.frames import SamplingConfig, sample_frame_groups
 from hma.video.quality import FrameQuality, QualityConfig, QualityReport, iter_selected_frames
 
@@ -56,18 +56,13 @@ class PipelineConfig:
         """Every step's settings from the environment, plus VIDEO_MAX_FRAMES (unset, empty or
         0 means no cap), VIDEO_EMBED_BATCH_SIZE and VIDEO_JPEG_QUALITY."""
         defaults = cls()
-
-        def env(name, default):
-            value = os.getenv(name, "").strip()
-            return int(value) if value else default
-
         return cls(
             sampling=SamplingConfig.from_env(),
             quality=QualityConfig.from_env(),
             dedupe=DedupeConfig.from_env(),
-            max_frames=env("VIDEO_MAX_FRAMES", 0) or None,
-            embed_batch_size=env("VIDEO_EMBED_BATCH_SIZE", defaults.embed_batch_size),
-            jpeg_quality=env("VIDEO_JPEG_QUALITY", defaults.jpeg_quality),
+            max_frames=env_value("VIDEO_MAX_FRAMES", 0, int) or None,
+            embed_batch_size=env_value("VIDEO_EMBED_BATCH_SIZE", defaults.embed_batch_size, int),
+            jpeg_quality=env_value("VIDEO_JPEG_QUALITY", defaults.jpeg_quality, int),
         )
 
 

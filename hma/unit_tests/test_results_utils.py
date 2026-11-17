@@ -118,3 +118,19 @@ def test_defaults_are_unchanged_for_the_image_evaluation():
     results = [{"image1": "a.jpg", "image2": "b.jpg", "matched": False, "distance": "0.3"}]
     rows = _rows(results_utils.write_results(results, "pairwise_clip_float_compare.csv"))
     assert list(rows[0]) == ["image1", "image2", "distance", "matched"]
+
+
+class TestCsvRows:
+    def test_rows_round_trip_as_strings(self, tmp_path):
+        path = tmp_path / "rows.csv"
+        results_utils.write_csv_rows(path, [{"a": 1, "b": "x"}, {"a": 2.5, "b": "y"}])
+        assert results_utils.read_csv_rows(path) == [{"a": "1", "b": "x"}, {"a": "2.5", "b": "y"}]
+
+    def test_the_header_is_the_first_rows_keys_in_order(self, tmp_path):
+        path = tmp_path / "rows.csv"
+        results_utils.write_csv_rows(path, [{"z": 1, "a": 2}])
+        assert path.read_text().splitlines()[0] == "z,a"
+
+    def test_no_rows_is_an_error(self, tmp_path):
+        with pytest.raises(IndexError):
+            results_utils.write_csv_rows(tmp_path / "rows.csv", [])

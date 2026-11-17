@@ -22,6 +22,7 @@ from hma.video.frames import (
     sample_frame_groups,
     sample_frames,
 )
+from video_testing import write_video
 
 RED = (0, 0, 255)  # BGR
 BLUE = (255, 0, 0)
@@ -31,18 +32,11 @@ SIZE = (64, 48)  # width, height
 
 
 def make_video(path, segments, fps=FPS, size=SIZE):
-    """Write a video made of (bgr_colour, frame_count) blocks and return its path as a string.
-
-    MJPG in an .avi container is used because OpenCV can write it with both its macOS
-    (AVFoundation) and Linux (FFmpeg) backends; mp4v/.mp4 is not available on macOS."""
-    writer = cv2.VideoWriter(str(path), cv2.VideoWriter_fourcc(*"MJPG"), fps, size)
-    assert writer.isOpened(), "OpenCV cannot write MJPG/avi video in this environment"
+    """Write a video made of (bgr_colour, frame_count) blocks and return its path as a string."""
+    frames = []
     for colour, count in segments:
-        frame = np.full((size[1], size[0], 3), colour, np.uint8)
-        for _ in range(count):
-            writer.write(frame)
-    writer.release()
-    return str(path)
+        frames.extend([np.full((size[1], size[0], 3), colour, np.uint8)] * count)
+    return write_video(path, frames, fps)
 
 
 @pytest.fixture

@@ -2,7 +2,7 @@
 import json
 import csv
 from pathlib import Path
-from typing import Dict, Iterable, List, Set, Tuple, Optional
+from typing import Callable, Dict, Iterable, List, Set, Tuple, Optional
 
 
 def normalize_label_path(path_str: str) -> str:
@@ -321,14 +321,16 @@ def classify_pairwise_by_series(
 def classify_pairs_by_series(
     series_to_items: Dict[str, Set[str]],
     pairs: Iterable[Tuple[str, str, float]],
+    normalize: Callable[[str], str] = normalize_pairwise_path,
 ) -> List[Tuple[float, bool]]:
     """
     Classify (item1, item2, distance) pairs as same-series (True) or different-series (False).
 
     Works on in-memory pairs of any kind of item (images, videos), so an evaluation
     does not have to write and re-read a pairwise file. Paths are normalized the same
-    way as in classify_pairwise_by_series; pairs with an item outside every series are
-    skipped. Distances must be "smaller is more similar".
+    way as in classify_pairwise_by_series, unless normalize says otherwise (pass `str`
+    when the items already match the series' items exactly); pairs with an item outside
+    every series are skipped. Distances must be "smaller is more similar".
 
     Returns:
         List of (distance, is_same_series) tuples
@@ -339,8 +341,8 @@ def classify_pairs_by_series(
 
     for item1_src, item2_src, distance in pairs:
         # Normalize paths to handle container mount prefixes
-        item1 = normalize_pairwise_path(item1_src)
-        item2 = normalize_pairwise_path(item2_src)
+        item1 = normalize(item1_src)
+        item2 = normalize(item2_src)
 
         # Skip if either item is not in any series
         if item1 not in item_to_series or item2 not in item_to_series:

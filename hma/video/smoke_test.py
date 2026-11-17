@@ -5,13 +5,13 @@ them against a running HMA, and checks the results. In the sample, clips that sh
 frames that are identical, so the first hit of every query must be right.
 """
 
-import csv
 import os
 import sys
 from datetime import datetime
 from pathlib import Path
 
 from hma.logging_utils import get_log_file, setup_logging
+from hma.results_utils import read_csv_rows
 from hma.video.evaluate import SIGNAL_TYPE, EvaluationConfig, run
 from hma.video.sample_videos import make_sample_videos
 
@@ -31,11 +31,6 @@ EXPECTED_FILES = [
 ]
 
 
-def _rows(path: Path) -> list[dict]:
-    with open(path, newline="") as f:
-        return list(csv.DictReader(f))
-
-
 def check_results(summary: dict, config: EvaluationConfig) -> list[str]:
     """Return what is wrong with the results of a run on the sample videos; empty if all is well."""
     results_dir = summary["results_dir"]
@@ -45,18 +40,18 @@ def check_results(summary: dict, config: EvaluationConfig) -> list[str]:
     if summary["unusable"]:
         problems.append(f"{summary['unusable']} sample videos had no usable frame")
 
-    for row in _rows(results_dir / f"retrieval_sweep_{SIGNAL_TYPE}_results.csv"):
+    for row in read_csv_rows(results_dir / f"retrieval_sweep_{SIGNAL_TYPE}_results.csv"):
         # Ties are broken by the closest frame, which is identical for the clips that share a scene.
         # Without that tie-break the first hit is right only while no other series is within the distance.
         if row["series"] == "all" and (row["ranking"] == "closest_frame" or float(row["frame_distance"]) <= config.frame_distance):
             if float(row["map@1"]) != 1.0:
                 problems.append(f"map@1 is {row['map@1']}, not 1.0, for {row['ranking']} at distance {row['frame_distance']}")
 
-    pairwise = _rows(results_dir / f"map_by_series_pairwise_{SIGNAL_TYPE}_results.csv")[-1]
+    pairwise = read_csv_rows(results_dir / f"map_by_series_pairwise_{SIGNAL_TYPE}_results.csv")[-1]
     if float(pairwise["map@1"]) != 1.0:
         problems.append(f"pairwise map@1 is {pairwise['map@1']}, not 1.0")
 
-    curve = _rows(results_dir / f"match_precision_recall_{SIGNAL_TYPE}_results.csv")
+    curve = read_csv_rows(results_dir / f"match_precision_recall_{SIGNAL_TYPE}_results.csv")
     if not any(float(r["precision"]) == 1.0 and float(r["recall"]) >= 0.6 for r in curve):
         problems.append("the match curve has no point with full precision and recall of at least 0.6")
     return problems

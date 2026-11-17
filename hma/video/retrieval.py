@@ -69,15 +69,13 @@ def rankings_at(
     matches_by_query: MatchesByQuery,
     frames: Mapping[str, FrameRef],
     videos: Sequence[str],
-    names: Mapping[str, str],
     max_distance: float,
     seed: int = 0,
 ) -> dict[str, dict[str, list[tuple[str, float]]]]:
     """Rank every video for every query at one frame distance, once per ranking.
 
-    Returns ranking name -> {query -> [(video, 1 - score), ...] best first}, with every video
-    called by names[video] so that it matches the series labels. The 1 - score is a distance in the
-    sense the metrics use: smaller is more similar.
+    Returns ranking name -> {query -> [(video, 1 - score), ...] best first}. The 1 - score is a
+    distance in the sense the metrics use: smaller is more similar.
     """
     result: dict[str, dict[str, list[tuple[str, float]]]] = {ranking: {} for ranking in RANKINGS}
     for query, frame_matches in matches_by_query.items():
@@ -85,7 +83,7 @@ def rankings_at(
         closest = closest_distances(frame_matches, frames, exclude_video=query)
         for ranking in RANKINGS:
             ordered = rank_videos(scores, closest, videos, query, ranking, seed)
-            result[ranking][names[query]] = [(names[v], 1 - scores.get(v, 0.0)) for v in ordered]
+            result[ranking][query] = [(v, 1 - scores.get(v, 0.0)) for v in ordered]
     return result
 
 
@@ -103,7 +101,6 @@ def score_pairs(
     matches_by_query: MatchesByQuery,
     frames: Mapping[str, FrameRef],
     videos: Sequence[str],
-    names: Mapping[str, str],
     max_distance: float,
     queries: Iterable[str] | None = None,
 ) -> Iterator[tuple[str, str, float]]:
@@ -116,4 +113,4 @@ def score_pairs(
         scores = video_scores(matches_by_query[query], frames, max_distance, exclude_video=query)
         for video in videos:
             if video != query:
-                yield names[query], names[video], 1 - scores.get(video, 0.0)
+                yield query, video, 1 - scores.get(video, 0.0)

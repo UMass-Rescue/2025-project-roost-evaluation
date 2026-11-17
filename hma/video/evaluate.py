@@ -25,7 +25,8 @@ from hma.video.frame_index import VideoIndex, index_videos, lookup_frames, wait_
 from hma.video.pairwise import distance_pairs, video_distances
 from hma.video.series_labels_utils import find_video_series, get_video_files
 
-video_input_dir = Path("./hma/video/resources/videos")
+# where hma/video/resources/fetch_dataset.sh puts the series dataset
+video_input_dir = Path("./hma/video/resources/video-series-dataset/series")
 
 # The frame signal is the CLIP image embedding as floats; the integer "clip" signal has no vector to compare.
 SIGNAL_TYPE = "clip_float"
@@ -241,22 +242,18 @@ def _pairwise_suite(index, names, series_to_videos, config, results_dir) -> None
     print(f"  Pairwise: {len(pairs)} video pairs")
 
 
-def main():
-    start_time = time.time()
-    setup_logging("test")
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    os.environ["TEST_RUN_TIMESTAMP"] = timestamp
-    print("Running video evaluation...")
+def run(video_dir: Path, bank_name: str, config: EvaluationConfig) -> dict:
+    """Index the videos of video_dir in a fresh bank and evaluate them, writing the results.
 
-    video_dir = Path(os.environ.get("VIDEO_INPUT_DIR", str(video_input_dir)))
+    Resets the HMA database first, as the image evaluation does. Returns the results folder and
+    how many videos and frames were indexed.
+    """
     videos = get_video_files(video_dir)
     series = find_video_series(video_dir)
-    config = EvaluationConfig.from_env()
     print(f"Found {len(videos)} videos in {len(series)} series")
 
     client = HMAClient()
     client.cleanup_test_environment(SIGNAL_TYPE)
-    bank_name = os.getenv("BANK_NAME", "VIDEO_TEST_BANK")
     if not client.setup_bank(bank_name):
         raise RuntimeError(f"Could not set up bank {bank_name}")
 
@@ -271,9 +268,26 @@ def main():
     print("Waiting for HMA to refresh its index...")
     wait_until_searchable(client, index, SIGNAL_TYPE)
     evaluate(client, index, videos, series, config)
+    return {
+        "results_dir": get_results_dir(),
+        "videos": len(videos),
+        "frames": len(index.frames),
+        "unusable": len(index.unusable),
+    }
 
+
+def main():
+    start_time = time.time()
+    setup_logging("test")
+    os.environ["TEST_RUN_TIMESTAMP"] = datetime.now().strftime("%Y%m%d_%H%M%S")
+    print("Running video evaluation...")
+    summary = run(
+        Path(os.environ.get("VIDEO_INPUT_DIR", str(video_input_dir))),
+        os.getenv("BANK_NAME", "VIDEO_TEST_BANK"),
+        EvaluationConfig.from_env(),
+    )
     elapsed = int(time.time() - start_time)
-    print(f"✓ Video evaluation completed in {elapsed // 60}m {elapsed % 60}s. Results: {get_results_dir()}. Logs: {get_log_file()}")
+    print(f"✓ Video evaluation completed in {elapsed // 60}m {elapsed % 60}s. Results: {summary['results_dir']}. Logs: {get_log_file()}")
 
 
 if __name__ == "__main__":

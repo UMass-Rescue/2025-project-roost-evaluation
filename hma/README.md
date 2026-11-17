@@ -17,8 +17,9 @@ Make sure you've completed the root [README.md](../README.md)'s "Quick Start"
   (`Dockerfile.hma`, `omm_config.py`, `resources/patches/`) and `unit_tests/`.
 - `hma/image/`: the image evaluation (`evaluate.py`, `tests/`, `resources/`).
   Commands are in [image/TEST_COMMANDS.md](image/TEST_COMMANDS.md).
-- `hma/video/`: the video evaluation, starting with frame sampling
-  ([video/README.md](video/README.md)).
+- `hma/video/`: the video evaluation, which hashes representative frames of
+  each video and stores them in HMA. Setup and commands are in
+  [video/README.md](video/README.md); `make video-smoke-test` tries it without a dataset.
 
 ## Run Tests
 

@@ -5,6 +5,7 @@ at the largest frame distance serves every smaller one.
 """
 
 import random
+from bisect import bisect_left
 from typing import Iterable, Iterator, Mapping, Sequence
 
 from hma.metrics.map import compute_series_map
@@ -47,14 +48,18 @@ def rank_videos(
     """Every video but the query, best first.
 
     Both rankings put the higher score first. Candidates that still tie are put in a fixed random
-    order (the same for the same seed and query), so the file names never decide a ranking.
+    order (the same for the same seed and query, whatever folder the videos are in), so the file
+    names never decide a ranking.
     CLOSEST_FRAME first breaks ties by the distance of the candidate's closest frame, and a
     candidate none of whose frames were looked up ranks last among its score.
     """
     if ranking not in RANKINGS:
         raise ValueError(f"Unknown ranking {ranking!r}; expected one of {RANKINGS}")
-    others = sorted(video for video in videos if video != query)
-    random.Random(f"{seed}/{query}").shuffle(others)
+    ordered = sorted(videos)
+    # Seeded by the query's place among the sorted videos, not by its path, so the order is the
+    # same wherever the files are.
+    others = [video for video in ordered if video != query]
+    random.Random(f"{seed}/{bisect_left(ordered, query)}").shuffle(others)
     if ranking == CLOSEST_FRAME:
         return sorted(others, key=lambda v: (-scores.get(v, 0.0), closest.get(v, float("inf"))))
     return sorted(others, key=lambda v: -scores.get(v, 0.0))

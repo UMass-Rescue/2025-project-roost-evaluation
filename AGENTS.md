@@ -19,7 +19,10 @@ This repo evaluates two independent systems against ground-truth datasets:
   (`Dockerfile.hma`, `omm_config.py`, `resources/patches/`) and `GPU_SETUP.md`.
   Each content type has its own folder: `hma/image/` holds `evaluate.py`,
   `tests/`, `resources/`, `series_labels_utils.py` (the image file types over the shared logic),
-  `TEST_COMMANDS.md` and `EVALUATION_DESCRIPTION.md`.
+  `TEST_COMMANDS.md` and `EVALUATION_DESCRIPTION.md`. `hma/video/` holds the
+  video evaluation (`evaluate.py`, `smoke_test.py`, the frame-selection
+  pipeline, `README.md`); its dataset is fetched into `hma/video/resources/`,
+  never committed.
 - `sentinel/` holds the equivalent shape for the **Sentinel** domain.
 - Root-level files (`README.md`, `docker-compose.yaml`, `Dockerfile`,
   `requirements.txt`, `Makefile`) are shared across both domains —
@@ -42,10 +45,12 @@ docker compose run --rm -e BANK_NAME=SMOKE_TEST evaluation   # smoke test
 docker compose run --rm -e EVAL_MODE=test evaluation         # full test suite
 make smoke-test       # local equivalent, against localhost
 make run-evaluation    # local equivalent, full suite
+make video-smoke-test  # video evaluation smoke test (generated sample clips)
+make fetch-video-dataset && make run-video-evaluation   # full video evaluation
 ```
 
-See `hma/image/TEST_COMMANDS.md`, `sentinel/README.md`, `hma/image/EVALUATION_DESCRIPTION.md`,
-and `hma/GPU_SETUP.md` for full detail — don't duplicate that detail here.
+See `hma/image/TEST_COMMANDS.md`, `hma/video/README.md`, `sentinel/README.md`,
+`hma/image/EVALUATION_DESCRIPTION.md`, and `hma/GPU_SETUP.md` for full detail — don't duplicate that detail here.
 
 ## Code conventions
 

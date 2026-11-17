@@ -98,6 +98,12 @@ class TestRankVideos:
         assert first != sorted(first)  # not simply alphabetical
         assert first != rank_videos({}, {}, names, "v00", SCORE_ONLY, seed=2)
 
+    def test_the_tie_order_does_not_depend_on_the_folder_the_videos_are_in(self):
+        names = [f"v{i:02d}.mp4" for i in range(30)]
+        here = rank_videos({}, {}, [f"/data/a/{n}" for n in names], "/data/a/v05.mp4", SCORE_ONLY)
+        there = rank_videos({}, {}, [f"/elsewhere/b/{n}" for n in names], "/elsewhere/b/v05.mp4", SCORE_ONLY)
+        assert [v.rsplit("/", 1)[1] for v in here] == [v.rsplit("/", 1)[1] for v in there]
+
     def test_the_tie_order_differs_between_queries(self):
         names = [f"v{i:02d}" for i in range(30)]
         assert rank_videos({}, {}, names, "v00", SCORE_ONLY)[:5] != rank_videos({}, {}, names, "v01", SCORE_ONLY)[:5]

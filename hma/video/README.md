@@ -1,7 +1,8 @@
 # Video evaluation
 
 Video is evaluated as a bag of frames: representative frames are chosen from each video,
-hashed with the existing CLIP image signal, and stored in HMA.
+hashed with the existing CLIP image signal, and stored in HMA. A video then matches another in
+proportion to how many of its frames match one of the other's.
 
 Where this README refers to "the series dataset" it means UMass Rescue Lab's
 [video-series-dataset](https://github.com/UMass-Rescue/video-series-dataset): 398 clips of
@@ -9,11 +10,93 @@ Where this README refers to "the series dataset" it means UMass Rescue Lab's
 SA-V dataset and grouped into 100 series, each series being the consecutive segments of one
 source video.
 
-This folder currently holds the steps that turn a video into the frames to hash: choosing
-candidate frames ([frames.py](frames.py)), filtering out low-information ones
-([quality.py](quality.py)), removing repeats ([dedupe.py](dedupe.py)), and the
-[pipeline](pipeline.py) that runs them in order. [frame_index.py](frame_index.py) stores the
-frames in an HMA bank and scores a query video against it.
+## Quick start
+
+Start HMA first (the root [README.md](../../README.md)'s Quick Start). Each run **resets HMA's
+database**, as the image evaluation does, so it replaces whatever other evaluations left in it.
+
+```bash
+make video-smoke-test         # about 1 minute, no dataset needed: see "Smoke test" below
+make fetch-video-dataset      # once: the series dataset, about 550 MB, at a pinned commit
+make run-video-evaluation     # the full evaluation, about 4 minutes on the series dataset
+```
+
+The same in Docker, which already sees the repo (and so the dataset) at `/build`:
+
+```bash
+docker compose run --rm evaluation python hma/video/smoke_test.py
+docker compose run --rm evaluation python hma/video/evaluate.py
+```
+
+Results are written to `results/evaluation_results/<timestamp>/` (`OUTPUT_DIR` changes the root)
+and the log to `results/test_run_logs/`. To point the evaluation at another folder of series
+folders, set `VIDEO_INPUT_DIR` to it (a series is a subfolder with at least two videos).
+
+### Smoke test
+
+[smoke_test.py](smoke_test.py) writes 12 generated clips ([sample_videos.py](sample_videos.py): four
+series of three clips, the same files every time), runs the whole evaluation on them, and checks
+that every result file exists and that the first hit of every query is right. It prints the
+commands that reproduce it, and exits non-zero if a check fails. Expect
+`✓ Video smoke test passed: 12 videos, 24 frames`. The generated clips are in
+`results/video_smoke_samples/`, which can be deleted afterwards; to write them elsewhere run
+`python -m hma.video.sample_videos <folder>`.
+
+## What it measures
+
+Every video is a query against the others in the bank (leave one out), and videos of the same
+series are the right answers. There are three suites; the metrics are mAP and precision/recall.
+
+- **Retrieval.** Each frame of the query is looked up in the bank, and a candidate video scores the
+  share of the query's frames that matched one of its frames within a frame distance. Candidates are
+  ranked by score, and two orderings are reported: score alone (candidates that tie are in a fixed
+  random order), and score then the closest matching frame. This is swept over frame distances
+  (`VIDEO_DISTANCE_STEP` to `VIDEO_DISTANCE_MAX`). The series are split in two with a fixed seed, and
+  the distance that gives the best score-only mAP@3 on the train half is reported on the test half,
+  beside the default `VIDEO_FRAME_DISTANCE`.
+- **Match.** Precision and recall of calling two videos a match, sweeping the score threshold at the
+  default frame distance, and again at the distance chosen on the train half, for test queries only.
+- **Pairwise.** A distance between two videos from their frame embeddings alone: the mean, over
+  one video's frames, of the distance to the closest frame of the other, averaged over both
+  directions. It needs no index or threshold, so it measures the embeddings. Its mAP, precision/recall
+  and distance distribution are reported.
+
+A video with no usable frame is never dropped from the metrics: it cannot be found, which counts
+against the result.
+
+| Output file (in the results folder) | Contents |
+|---|---|
+| `retrieval_sweep_clip_float_results.csv` | mAP@1..`MAX_K` for each frame distance, ranking, and series group (all, train, test) |
+| `frame_distance_choice_clip_float_results.csv` | the default distance and the one chosen on train, with their train and test mAP@3 |
+| `map_by_series_{score_only,closest_frame}_clip_float_results.csv` | mAP@k per series at the default distance |
+| `match_precision_recall_clip_float_results.csv`, `..._curve.png` | precision/recall over the score threshold, and the same at the chosen distance as `match_precision_recall_selected_...` |
+| `pairwise_clip_float_compare.csv` | the distance for every pair of videos (paths anonymised unless `DEANONYMIZE_IMAGE_PATHS=1`) |
+| `map_by_series_pairwise_...`, `precision_recall_...`, `distance_distribution_...png` | the pairwise metrics |
+| `content_id_to_frame_clip_float.json` | which video and frame each bank item is |
+
+| Environment variable | Meaning | Default |
+|---|---|---|
+| `VIDEO_INPUT_DIR` | Folder of series folders | `hma/video/resources/video-series-dataset/series` |
+| `BANK_NAME` | Bank to create in HMA | `VIDEO_TEST_BANK` (`VIDEO_SMOKE_TEST` for the smoke test) |
+| `VIDEO_FRAME_DISTANCE` | The default frame distance. 0.10 is HMA's own `clip_float` threshold | `0.10` |
+| `VIDEO_DISTANCE_MAX`, `VIDEO_DISTANCE_STEP` | The frame distances swept: step, 2 x step, ... up to the maximum | `0.30`, `0.05` |
+| `MAX_K` | Largest k of the mAP@k columns in the sweep (at least 3) | `5` |
+| `VIDEO_TEST_FRACTION`, `VIDEO_SPLIT_SEED` | Share of the series held out, and the seed of the split and of the order of tied candidates | `0.5`, `0` |
+| `MAX_WORKERS` | Parallel lookups | `8` |
+
+The frame selection has its own variables, below.
+
+Video is stored with HMA's `clip_float` signal only. Frames are looked up once at the largest
+frame distance and the smaller ones are taken from that result.
+
+## Frame selection
+
+These steps turn a video into the frames to hash: choosing candidate frames ([frames.py](frames.py)),
+filtering out low-information ones ([quality.py](quality.py)), removing repeats
+([dedupe.py](dedupe.py)), and the [pipeline](pipeline.py) that runs them in order.
+[frame_index.py](frame_index.py) then stores the frames in an HMA bank and scores a query video
+against it, and [retrieval.py](retrieval.py) and [pairwise.py](pairwise.py) turn those scores and
+distances into the rankings the metrics use.
 
 ## Frame sampling
 
@@ -139,6 +222,17 @@ reason, slices dropped, pixel and embedding duplicates, frames thinned to the ca
 kept. A video with nothing usable returns no frames and `report.no_usable_frames` is true, so
 the caller can tell the user.
 
+Try the sampling on a video (a 3 s clip with no cut gives three frames, at 0.5 s, 1.5 s and 2.5 s):
+
+```bash
+PYTHONPATH=. python - <<'EOF'
+from hma.video.frames import sample_frames
+
+for frame in sample_frames("path/to/video.mp4"):
+    print(frame.index, round(frame.seconds, 2), frame.image.shape)
+EOF
+```
+
 ## Indexing and scoring
 
 [frame_index.py](frame_index.py) connects the pipeline to HMA. HMA hashes the frames with its
@@ -167,17 +261,6 @@ for distance in (0.1, 0.2, 0.3):  # one lookup serves every smaller distance
 
 HMA builds its search index in the background, so wait for it to include the new frames
 (`HMAClient.wait_for_index_update`) before looking anything up.
-
-Try the sampling on a video (a 3 s clip with no cut gives three frames, at 0.5 s, 1.5 s and 2.5 s):
-
-```bash
-PYTHONPATH=. python - <<'EOF'
-from hma.video.frames import sample_frames
-
-for frame in sample_frames("path/to/video.mp4"):
-    print(frame.index, round(frame.seconds, 2), frame.image.shape)
-EOF
-```
 
 ## Dependencies
 

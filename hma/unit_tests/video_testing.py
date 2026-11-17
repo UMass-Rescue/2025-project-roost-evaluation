@@ -3,7 +3,14 @@
 import cv2
 import numpy as np
 
+from hma.video.frame_index import decode_signal, encode_signal
+from hma.video.frames import SamplingConfig
+from hma.video.pipeline import PipelineConfig
+
 H, W = 360, 640
+
+# one frame per second, no scene detection, no neighbouring candidates: easy to count
+CONFIG = PipelineConfig(sampling=SamplingConfig(scene_detector="none", max_frame_gap_seconds=1.0, candidate_window_seconds=0))
 
 
 def detailed(seed=0, block=40, noise=20):
@@ -39,3 +46,38 @@ def scenes_video(path, scenes, fps=10):
     for seed, count in scenes:
         frames.extend([detailed(seed)] * count)
     return write_video(path, frames, fps)
+
+
+class FakeHMA:
+    """A stand-in for the HMA service: hashes a frame as its normalised 8x8 grayscale picture and keeps the bank in memory."""
+
+    def __init__(self):
+        self.bank = {}  # content id -> signal
+        self.hash_calls = []
+        self.fail_adds = False
+
+    def hash_image_bytes(self, images, signal_type):
+        self.hash_calls.append((len(images), signal_type))
+        signals = []
+        for image in images:
+            gray = cv2.imdecode(np.frombuffer(image, np.uint8), cv2.IMREAD_GRAYSCALE)
+            small = cv2.resize(gray, (8, 8), interpolation=cv2.INTER_AREA).astype(np.float32).ravel()
+            small -= small.mean()
+            signals.append(encode_signal(small / np.linalg.norm(small)))
+        return signals
+
+    def add_signal_to_bank(self, bank_name, signal_type, signal):
+        if self.fail_adds:
+            return None
+        content_id = str(len(self.bank) + 1)
+        self.bank[content_id] = signal
+        return content_id
+
+    def match_with_signal_threshold(self, signal, threshold, signal_type):
+        query = decode_signal(signal)
+        matches = []
+        for content_id, stored in self.bank.items():
+            distance = 1 - float(query @ decode_signal(stored))
+            if distance <= threshold:
+                matches.append({"bank_content_id": int(content_id), "distance": str(distance)})
+        return {"status": "success", "matches": matches}

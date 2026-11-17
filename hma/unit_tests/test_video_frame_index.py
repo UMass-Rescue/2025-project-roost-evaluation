@@ -10,52 +10,17 @@ import pytest
 
 from hma.video.frame_index import (
     FrameRef,
+    VideoIndex,
+    closest_distances,
     decode_signal,
     encode_signal,
     hma_embedder,
     index_videos,
     lookup_frames,
     video_scores,
+    wait_until_searchable,
 )
-from hma.video.frames import SamplingConfig
-from hma.video.pipeline import PipelineConfig
-from video_testing import detailed, scenes_video, write_video
-
-# one frame per second, no scene detection, no neighbouring candidates: easy to count
-CONFIG = PipelineConfig(sampling=SamplingConfig(scene_detector="none", max_frame_gap_seconds=1.0, candidate_window_seconds=0))
-
-
-class FakeHMA:
-    def __init__(self):
-        self.bank = {}  # content id -> signal
-        self.hash_calls = []
-        self.fail_adds = False
-
-    def hash_image_bytes(self, images, signal_type):
-        self.hash_calls.append((len(images), signal_type))
-        signals = []
-        for image in images:
-            gray = cv2.imdecode(np.frombuffer(image, np.uint8), cv2.IMREAD_GRAYSCALE)
-            small = cv2.resize(gray, (8, 8), interpolation=cv2.INTER_AREA).astype(np.float32).ravel()
-            small -= small.mean()
-            signals.append(encode_signal(small / np.linalg.norm(small)))
-        return signals
-
-    def add_signal_to_bank(self, bank_name, signal_type, signal):
-        if self.fail_adds:
-            return None
-        content_id = str(len(self.bank) + 1)
-        self.bank[content_id] = signal
-        return content_id
-
-    def match_with_signal_threshold(self, signal, threshold, signal_type):
-        query = decode_signal(signal)
-        matches = []
-        for content_id, stored in self.bank.items():
-            distance = 1 - float(query @ decode_signal(stored))
-            if distance <= threshold:
-                matches.append({"bank_content_id": int(content_id), "distance": str(distance)})
-        return {"status": "success", "matches": matches}
+from video_testing import CONFIG, FakeHMA, detailed, scenes_video, write_video
 
 
 @pytest.fixture
@@ -156,6 +121,54 @@ class TestLookupFrames:
             lookup_frames(Failing(), [np.ones(4, dtype=np.float32)], 0.1)
 
 
+class TestWaitUntilSearchable:
+    @pytest.fixture
+    def indexed(self, tmp_path, hma):
+        video = scenes_video(tmp_path / "a.avi", [(1, 10), (2, 10)])
+        return index_videos(hma, "BANK", [video], config=CONFIG)
+
+    def test_returns_at_once_when_the_last_frame_is_found(self, indexed, hma, monkeypatch):
+        monkeypatch.setattr("hma.video.frame_index.time.sleep", lambda s: pytest.fail("should not wait"))
+        wait_until_searchable(hma, indexed)
+
+    def test_waits_until_a_lookup_finds_the_last_frame(self, indexed, hma, monkeypatch):
+        calls, sleeps = [], []
+        lookup = hma.match_with_signal_threshold
+
+        def stale_then_fresh(signal, threshold, signal_type):
+            calls.append(threshold)
+            return {"status": "success", "matches": []} if len(calls) < 3 else lookup(signal, threshold, signal_type)
+
+        monkeypatch.setattr(hma, "match_with_signal_threshold", stale_then_fresh)
+        monkeypatch.setattr("hma.video.frame_index.time.sleep", sleeps.append)
+        wait_until_searchable(hma, indexed, interval=7)
+        assert len(calls) == 3 and sleeps == [7, 7]
+
+    def test_a_failed_lookup_is_retried(self, indexed, hma, monkeypatch):
+        calls = []
+        lookup = hma.match_with_signal_threshold
+
+        def flaky(signal, threshold, signal_type):
+            calls.append(1)
+            return {"status": "failure", "error": "busy"} if len(calls) == 1 else lookup(signal, threshold, signal_type)
+
+        monkeypatch.setattr(hma, "match_with_signal_threshold", flaky)
+        monkeypatch.setattr("hma.video.frame_index.time.sleep", lambda s: None)
+        wait_until_searchable(hma, indexed)
+        assert len(calls) == 2
+
+    def test_times_out_when_the_frame_never_appears(self, indexed, hma, monkeypatch):
+        monkeypatch.setattr(hma, "match_with_signal_threshold", lambda *a: {"status": "success", "matches": []})
+        clock = iter(range(0, 1000, 10))
+        monkeypatch.setattr("hma.video.frame_index.time.monotonic", lambda: next(clock))
+        monkeypatch.setattr("hma.video.frame_index.time.sleep", lambda s: None)
+        with pytest.raises(TimeoutError, match="not searchable"):
+            wait_until_searchable(hma, indexed, timeout=30)
+
+    def test_an_empty_index_needs_no_wait(self, hma):
+        wait_until_searchable(hma, VideoIndex())
+
+
 FRAMES = {
     "1": FrameRef("a", 0, 0.5),
     "2": FrameRef("a", 6, 1.5),
@@ -191,6 +204,19 @@ class TestVideoScores:
 
     def test_a_video_with_no_match_is_absent(self):
         assert "c" not in video_scores([[("3", 0.0)]], FRAMES, 0.1)
+
+
+
+class TestClosestDistances:
+    def test_each_video_gets_the_distance_of_its_closest_frame(self):
+        matches = [[("1", 0.08), ("3", 0.30)], [("2", 0.02), ("3", 0.10)]]
+        assert closest_distances(matches, FRAMES) == {"a": 0.02, "b": 0.10}
+
+    def test_the_query_video_is_left_out(self):
+        assert closest_distances([[("1", 0.0), ("3", 0.2)]], FRAMES, exclude_video="a") == {"b": 0.2}
+
+    def test_unknown_bank_items_and_empty_results_are_ignored(self):
+        assert closest_distances([[("99", 0.0)], []], FRAMES) == {}
 
 
 def test_a_query_finds_the_video_that_shares_its_scene(tmp_path, hma):

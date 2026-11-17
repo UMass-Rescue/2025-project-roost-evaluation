@@ -5,6 +5,7 @@ CLIP image signal, and a query video matches a candidate video in proportion to 
 the query's own frames that found one of the candidate's frames.
 """
 
+import time
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
@@ -89,6 +90,33 @@ def index_videos(
     return index
 
 
+def wait_until_searchable(
+    client: HMAClient,
+    index: VideoIndex,
+    signal_type: str = "clip_float",
+    timeout: float = 180.0,
+    interval: float = 2.0,
+) -> None:
+    """Block until a lookup finds the frame added last, so every frame added before it is searchable too.
+
+    HMA serves lookups from a copy of its index that it refreshes in the background, and the index
+    size it reports can be ahead of that copy, so the size is not enough to know when to look up.
+    Raises TimeoutError if the frame is not found within timeout seconds.
+    """
+    if not index.frames:
+        return
+    last_id = next(reversed(index.frames))
+    probe = encode_signal(index.embeddings[index.frames[last_id].video][-1])
+    deadline = time.monotonic() + timeout
+    while True:
+        response = client.match_with_signal_threshold(probe, 0.001, signal_type)
+        if response.get("status") == "success" and any(str(m["bank_content_id"]) == last_id for m in response["matches"]):
+            return
+        if time.monotonic() >= deadline:
+            raise TimeoutError(f"Frame {last_id} was not searchable after {timeout:.0f}s; HMA's index has not caught up.")
+        time.sleep(interval)
+
+
 def lookup_frames(
     client: HMAClient,
     embeddings: Iterable[np.ndarray],
@@ -126,3 +154,21 @@ def video_scores(
         videos.discard(exclude_video)
         matched.update(videos)
     return {video: count / len(frame_matches) for video, count in matched.items()}
+
+
+def closest_distances(
+    frame_matches: Sequence[Sequence[Match]],
+    frames: Mapping[str, FrameRef],
+    exclude_video: str | None = None,
+) -> dict[str, float]:
+    """For each video that has any frame in the lookup results, the distance of its frame
+    closest to a query frame. The query's own video (exclude_video) is left out."""
+    closest: dict[str, float] = {}
+    for matches in frame_matches:
+        for content_id, distance in matches:
+            frame = frames.get(content_id)
+            if frame is None or frame.video == exclude_video:
+                continue
+            if distance < closest.get(frame.video, float("inf")):
+                closest[frame.video] = distance
+    return closest

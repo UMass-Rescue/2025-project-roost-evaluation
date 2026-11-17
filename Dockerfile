@@ -17,6 +17,7 @@ COPY hma/hma_client.py /build/hma/hma_client.py
 COPY hma/logging_utils.py /build/hma/logging_utils.py
 COPY hma/results_utils.py /build/hma/results_utils.py
 COPY hma/path_id_store.py /build/hma/path_id_store.py
+COPY hma/series_labels_utils.py /build/hma/series_labels_utils.py
 COPY hma/metrics/ /build/hma/metrics/
 COPY hma/image/evaluate.py /build/hma/image/evaluate.py
 COPY hma/image/series_labels_utils.py /build/hma/image/series_labels_utils.py

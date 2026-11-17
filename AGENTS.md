@@ -15,11 +15,11 @@ This repo evaluates two independent systems against ground-truth datasets:
 
 - `hma/` holds everything HMA-specific. Code shared by the HMA evaluations
   sits at its root (`hma_client.py`, `logging_utils.py`, `results_utils.py`,
-  `path_id_store.py`, `metrics/`, `unit_tests/`), next to the HMA build
+  `path_id_store.py`, `series_labels_utils.py`, `metrics/`, `unit_tests/`), next to the HMA build
   (`Dockerfile.hma`, `omm_config.py`, `resources/patches/`) and `GPU_SETUP.md`.
   Each content type has its own folder: `hma/image/` holds `evaluate.py`,
-  `tests/`, `resources/`, `series_labels_utils.py`, `TEST_COMMANDS.md` and
-  `EVALUATION_DESCRIPTION.md`.
+  `tests/`, `resources/`, `series_labels_utils.py` (the image file types over the shared logic),
+  `TEST_COMMANDS.md` and `EVALUATION_DESCRIPTION.md`.
 - `sentinel/` holds the equivalent shape for the **Sentinel** domain.
 - Root-level files (`README.md`, `docker-compose.yaml`, `Dockerfile`,
   `requirements.txt`, `Makefile`) are shared across both domains —

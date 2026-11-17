@@ -12,7 +12,7 @@ import math
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, Iterator, List, Optional, Tuple
+from typing import Iterable, Iterator, List, Optional, Sequence, Tuple
 
 import cv2
 import numpy as np
@@ -40,12 +40,15 @@ class SamplingConfig:
     min_scene_seconds: shortest allowed scene. PySceneDetect counts this in frames,
         so it is given in seconds here to behave the same at any frame rate.
     max_frame_gap_seconds: longest gap between sampled frames inside a scene.
+    candidate_window_seconds: how far either side of a slice's midpoint to also offer frames,
+        so that a quality filter can pick the sharpest; 0 offers the midpoint only.
     """
 
     scene_detector: str = "adaptive"
     scene_threshold: Optional[float] = None
     min_scene_seconds: float = 1.0
     max_frame_gap_seconds: float = 1.0
+    candidate_window_seconds: float = 0.25
 
     def __post_init__(self):
         if self.scene_detector not in SCENE_DETECTORS:
@@ -56,11 +59,14 @@ class SamplingConfig:
             raise ValueError("min_scene_seconds must be positive")
         if self.max_frame_gap_seconds <= 0:
             raise ValueError("max_frame_gap_seconds must be positive")
+        if self.candidate_window_seconds < 0:
+            raise ValueError("candidate_window_seconds must not be negative")
 
     @classmethod
     def from_env(cls) -> "SamplingConfig":
-        """Read VIDEO_SCENE_DETECTOR, VIDEO_SCENE_THRESHOLD, VIDEO_MIN_SCENE_SECONDS
-        and VIDEO_MAX_FRAME_GAP_SECONDS; unset or empty values keep the defaults."""
+        """Read VIDEO_SCENE_DETECTOR, VIDEO_SCENE_THRESHOLD, VIDEO_MIN_SCENE_SECONDS,
+        VIDEO_MAX_FRAME_GAP_SECONDS and VIDEO_CANDIDATE_WINDOW_SECONDS; unset or empty
+        values keep the defaults."""
         defaults = cls()
 
         def env(name):
@@ -74,6 +80,9 @@ class SamplingConfig:
             min_scene_seconds=float(env("VIDEO_MIN_SCENE_SECONDS") or defaults.min_scene_seconds),
             max_frame_gap_seconds=float(
                 env("VIDEO_MAX_FRAME_GAP_SECONDS") or defaults.max_frame_gap_seconds
+            ),
+            candidate_window_seconds=float(
+                env("VIDEO_CANDIDATE_WINDOW_SECONDS") or defaults.candidate_window_seconds
             ),
         )
 
@@ -144,6 +153,25 @@ def detect_scenes(path, info: VideoInfo, config: SamplingConfig) -> List[Tuple[i
     ]
 
 
+def _slices(
+    scenes: Iterable[Tuple[int, int]], fps: float, max_frame_gap_seconds: float
+) -> Iterator[Tuple[int, int, int]]:
+    """(first_frame, end_frame, midpoint) of every slice: each scene is cut into the fewest
+    equal slices no longer than max_frame_gap_seconds (never more than one per frame)."""
+    for start, end in scenes:
+        length = end - start
+        if length <= 0:
+            continue
+        # round() absorbs float noise so an exact multiple (3.0 s at a 1.0 s gap) is not bumped up
+        slices = max(1, math.ceil(round(length / fps / max_frame_gap_seconds, 9)))
+        slices = min(slices, length)
+        for i in range(slices):
+            first = start + int(i * length / slices)
+            last = start + int((i + 1) * length / slices)
+            midpoint = min(start + int((i + 0.5) * length / slices), end - 1)
+            yield first, max(last, first + 1), midpoint
+
+
 def candidate_frame_indices(
     scenes: Iterable[Tuple[int, int]], fps: float, max_frame_gap_seconds: float
 ) -> List[int]:
@@ -155,16 +183,26 @@ def candidate_frame_indices(
     one frame at its midpoint. Midpoints also keep clear of the blur and fades that tend
     to sit right at a cut.
     """
-    indices = set()
-    for start, end in scenes:
-        length = end - start
-        if length <= 0:
-            continue
-        # round() absorbs float noise so an exact multiple (3.0 s at a 1.0 s gap) is not bumped up
-        slices = max(1, math.ceil(round(length / fps / max_frame_gap_seconds, 9)))
-        for i in range(slices):
-            indices.add(min(start + int((i + 0.5) * length / slices), end - 1))
-    return sorted(indices)
+    return sorted({mid for _, _, mid in _slices(scenes, fps, max_frame_gap_seconds)})
+
+
+def candidate_frame_groups(
+    scenes: Iterable[Tuple[int, int]],
+    fps: float,
+    max_frame_gap_seconds: float,
+    window_seconds: float,
+) -> List[List[int]]:
+    """
+    The candidate frames of each slice: its midpoint and the frames within window_seconds
+    either side, never leaving the slice. Groups are disjoint and in increasing order, so a
+    quality filter can choose one frame per slice. With a window of 0 each group is the
+    midpoint alone.
+    """
+    window = max(0, round(window_seconds * fps))
+    groups = []
+    for first, end, midpoint in _slices(scenes, fps, max_frame_gap_seconds):
+        groups.append(list(range(max(first, midpoint - window), min(end - 1, midpoint + window) + 1)))
+    return groups
 
 
 def iter_frames(path, indices: Iterable[int], fps: float) -> Iterator[SampledFrame]:
@@ -192,6 +230,36 @@ def iter_frames(path, indices: Iterable[int], fps: float) -> Iterator[SampledFra
             yield SampledFrame(index=target, seconds=target / fps, image=image)
     finally:
         cap.release()
+
+
+def iter_frame_groups(path, groups: Sequence[Sequence[int]], fps: float) -> Iterator[List[SampledFrame]]:
+    """
+    Decode the frames of each group, one group at a time. `groups` must be disjoint and in
+    increasing order, as candidate_frame_groups returns them. A group none of whose frames
+    could be decoded (the file ended early) is skipped.
+    """
+    frames = iter_frames(path, [index for group in groups for index in group], fps)
+    pending = next(frames, None)
+    for group in groups:
+        wanted = set(group)
+        decoded = []
+        while pending is not None and pending.index in wanted:
+            decoded.append(pending)
+            pending = next(frames, None)
+        if decoded:
+            yield decoded
+
+
+def sample_frame_groups(path, config: Optional[SamplingConfig] = None) -> Iterator[List[SampledFrame]]:
+    """Candidate frames grouped by slice: probe, detect scenes, choose groups, decode them."""
+    config = config or SamplingConfig.from_env()
+    path = Path(path)
+    info = probe_video(path)
+    scenes = detect_scenes(path, info, config)
+    groups = candidate_frame_groups(
+        scenes, info.fps, config.max_frame_gap_seconds, config.candidate_window_seconds
+    )
+    return iter_frame_groups(path, groups, info.fps)
 
 
 def sample_frames(path, config: Optional[SamplingConfig] = None) -> Iterator[SampledFrame]:

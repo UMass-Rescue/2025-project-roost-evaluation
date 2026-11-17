@@ -13,10 +13,13 @@ import pytest
 
 from hma.video.frames import (
     SamplingConfig,
+    candidate_frame_groups,
     candidate_frame_indices,
     detect_scenes,
+    iter_frame_groups,
     iter_frames,
     probe_video,
+    sample_frame_groups,
     sample_frames,
 )
 
@@ -61,6 +64,7 @@ class TestSamplingConfig:
         config = SamplingConfig()
         assert (config.scene_detector, config.scene_threshold) == ("adaptive", None)
         assert (config.min_scene_seconds, config.max_frame_gap_seconds) == (1.0, 1.0)
+        assert config.candidate_window_seconds == 0.25
 
     @pytest.mark.parametrize(
         "kwargs",
@@ -68,6 +72,7 @@ class TestSamplingConfig:
             {"scene_detector": "histogram"},
             {"min_scene_seconds": 0},
             {"max_frame_gap_seconds": -1},
+            {"candidate_window_seconds": -0.1},
         ],
     )
     def test_rejects_invalid_values(self, kwargs):
@@ -79,10 +84,16 @@ class TestSamplingConfig:
         monkeypatch.setenv("VIDEO_SCENE_THRESHOLD", "4.5")
         monkeypatch.setenv("VIDEO_MIN_SCENE_SECONDS", "0.5")
         monkeypatch.setenv("VIDEO_MAX_FRAME_GAP_SECONDS", "2")
-        assert SamplingConfig.from_env() == SamplingConfig("adaptive", 4.5, 0.5, 2.0)
+        monkeypatch.setenv("VIDEO_CANDIDATE_WINDOW_SECONDS", "0.5")
+        assert SamplingConfig.from_env() == SamplingConfig("adaptive", 4.5, 0.5, 2.0, 0.5)
 
     def test_from_env_ignores_unset_and_empty_values(self, monkeypatch):
-        for name in ("VIDEO_SCENE_DETECTOR", "VIDEO_MIN_SCENE_SECONDS", "VIDEO_MAX_FRAME_GAP_SECONDS"):
+        for name in (
+            "VIDEO_SCENE_DETECTOR",
+            "VIDEO_MIN_SCENE_SECONDS",
+            "VIDEO_MAX_FRAME_GAP_SECONDS",
+            "VIDEO_CANDIDATE_WINDOW_SECONDS",
+        ):
             monkeypatch.delenv(name, raising=False)
         monkeypatch.setenv("VIDEO_SCENE_THRESHOLD", "  ")
         assert SamplingConfig.from_env() == SamplingConfig()
@@ -146,6 +157,42 @@ class TestCandidateFrameIndices:
             # every scene gets at least one frame
             for s, e in scenes:
                 assert any(s <= i < e for i in indices)
+
+
+class TestCandidateFrameGroups:
+    def test_each_slice_gets_its_midpoint_and_the_frames_around_it(self):
+        groups = candidate_frame_groups([(0, 30)], fps=10, max_frame_gap_seconds=1.0, window_seconds=0.2)
+        assert groups == [[3, 4, 5, 6, 7], [13, 14, 15, 16, 17], [23, 24, 25, 26, 27]]
+
+    def test_a_window_of_zero_is_the_midpoints_alone(self):
+        assert candidate_frame_groups([(0, 30)], 10, 1.0, 0.0) == [[5], [15], [25]]
+        assert [g[0] for g in candidate_frame_groups([(0, 30), (30, 60)], 10, 1.0, 0.0)] == candidate_frame_indices(
+            [(0, 30), (30, 60)], 10, 1.0
+        )
+
+    def test_a_group_never_leaves_its_slice(self):
+        groups = candidate_frame_groups([(0, 30)], fps=10, max_frame_gap_seconds=1.0, window_seconds=10)
+        assert groups == [list(range(0, 10)), list(range(10, 20)), list(range(20, 30))]
+
+    def test_a_short_scene_is_one_group_inside_the_scene(self):
+        assert candidate_frame_groups([(0, 2)], fps=10, max_frame_gap_seconds=1.0, window_seconds=0.25) == [[0, 1]]
+        assert candidate_frame_groups([(40, 43)], 10, 1.0, 0.1) == [[40, 41, 42]]
+
+    def test_groups_are_disjoint_ordered_and_contain_the_midpoint(self):
+        rng = random.Random(1)
+        for _ in range(100):
+            start = rng.randint(0, 1000)
+            scenes = [(start, start + rng.randint(1, 500))]
+            fps, gap, window = rng.choice([6, 24, 29.97]), rng.choice([0.5, 1.0, 2.5]), rng.choice([0, 0.25, 1.0])
+            groups = candidate_frame_groups(scenes, fps, gap, window)
+            flat = [i for g in groups for i in g]
+            assert flat == sorted(set(flat))
+            mids = candidate_frame_indices(scenes, fps, gap)
+            assert [m in g for m, g in zip(mids, groups)] == [True] * len(groups)
+
+    def test_never_more_slices_than_frames(self):
+        groups = candidate_frame_groups([(0, 3)], fps=6, max_frame_gap_seconds=0.01, window_seconds=0)
+        assert groups == [[0], [1], [2]]
 
 
 class TestDetectScenes:
@@ -227,6 +274,38 @@ class TestIterFrames:
     def test_unreadable_file(self, tmp_path):
         with pytest.raises(ValueError):
             list(iter_frames(tmp_path / "missing.avi", [0], FPS))
+
+
+class TestIterFrameGroups:
+    def test_yields_one_list_of_frames_per_group(self, two_scenes):
+        groups = [[4, 5, 6], [14, 15], [54]]
+        got = list(iter_frame_groups(two_scenes, groups, FPS))
+        assert [[f.index for f in g] for g in got] == groups
+
+    def test_a_group_past_the_end_is_skipped_and_a_partial_group_is_kept(self, two_scenes):
+        got = list(iter_frame_groups(two_scenes, [[5], [58, 59, 60, 61], [500, 501]], FPS))
+        assert [[f.index for f in g] for g in got] == [[5], [58, 59]]
+
+    def test_decoding_is_lazy(self, two_scenes):
+        assert inspect.isgenerator(iter_frame_groups(two_scenes, [[5]], FPS))
+
+
+class TestSampleFrameGroups:
+    def test_groups_follow_the_scenes_and_the_window(self, two_scenes):
+        config = SamplingConfig(candidate_window_seconds=0.1)
+        groups = list(sample_frame_groups(two_scenes, config))
+        assert [[f.index for f in g] for g in groups] == [
+            [4, 5, 6], [14, 15, 16], [24, 25, 26], [34, 35, 36], [44, 45, 46], [54, 55, 56]
+        ]
+
+    def test_a_zero_window_matches_sample_frames(self, two_scenes):
+        config = SamplingConfig(candidate_window_seconds=0)
+        flat = [f.index for g in sample_frame_groups(two_scenes, config) for f in g]
+        assert flat == [f.index for f in sample_frames(two_scenes, config)]
+
+    def test_unreadable_file(self, tmp_path):
+        with pytest.raises(ValueError):
+            sample_frame_groups(tmp_path / "missing.avi", SamplingConfig())
 
 
 class TestSampleFrames:

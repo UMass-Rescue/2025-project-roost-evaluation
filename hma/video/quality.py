@@ -15,7 +15,7 @@ of its own later.
 import os
 from collections import Counter
 from dataclasses import dataclass, field
-from typing import Iterable, List, Optional, Sequence, Tuple
+from typing import Iterable, Iterator, List, Optional, Sequence, Tuple
 
 import cv2
 import numpy as np
@@ -140,18 +140,20 @@ class QualityReport:
         return text + "; NO USABLE FRAMES" if self.no_usable_frames else text
 
 
-def select_frames(
-    groups: Iterable[Sequence[SampledFrame]], config: Optional[QualityConfig] = None
-) -> Tuple[List[SelectedFrame], QualityReport]:
+def iter_selected_frames(
+    groups: Iterable[Sequence[SampledFrame]],
+    config: Optional[QualityConfig] = None,
+    report: Optional[QualityReport] = None,
+) -> Iterator[SelectedFrame]:
     """
-    Keep the sharpest usable frame of each group (the neighbouring candidates of one slice).
+    Yield the sharpest usable frame of each group (the neighbouring candidates of one slice).
 
-    A group with only junk frames is dropped, and the report counts it. Only the chosen
-    frames are held in memory, so a long video can be streamed through.
+    A group with only junk frames is dropped and counted in `report`, which is filled in as
+    the groups are consumed. Frames are handled one group at a time, so a long video can be
+    streamed through without holding its frames in memory.
     """
     config = config or QualityConfig()
-    report = QualityReport()
-    selected: List[SelectedFrame] = []
+    report = report if report is not None else QualityReport()
 
     for group in groups:
         report.slices += 1
@@ -165,5 +167,12 @@ def select_frames(
         if best is None:
             report.slices_dropped += 1
         else:
-            selected.append(best)
-    return selected, report
+            yield best
+
+
+def select_frames(
+    groups: Iterable[Sequence[SampledFrame]], config: Optional[QualityConfig] = None
+) -> Tuple[List[SelectedFrame], QualityReport]:
+    """iter_selected_frames, collected into a list together with its report."""
+    report = QualityReport()
+    return list(iter_selected_frames(groups, config, report)), report

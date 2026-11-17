@@ -11,6 +11,7 @@ import numpy as np
 import pytest
 
 from hma.video.frames import SampledFrame
+from video_testing import detailed
 from hma.video.quality import (
     BARS,
     BLURRY,
@@ -19,20 +20,13 @@ from hma.video.quality import (
     QualityConfig,
     QualityReport,
     assess_frame,
+    iter_selected_frames,
     measure_frame,
     select_frames,
 )
 
 H, W = 360, 640
 RNG = np.random.default_rng(0)
-
-
-def detailed(seed=0, block=40, noise=20):
-    """A sharp frame with large-scale structure and fine detail, like a busy real scene."""
-    rng = np.random.default_rng(seed)
-    base = rng.integers(0, 256, (H // block + 1, W // block + 1, 3), dtype=np.uint8)
-    image = cv2.resize(base, (W + block, H + block), interpolation=cv2.INTER_NEAREST)[:H, :W]
-    return np.clip(image.astype(np.float32) + rng.normal(0, noise, image.shape), 0, 255).astype(np.uint8)
 
 
 def blurred(image, sigma_fraction):
@@ -205,3 +199,21 @@ class TestSelectFrames:
     def test_an_empty_group_counts_as_a_dropped_slice(self):
         selected, report = select_frames([[], [frame(10, detailed())]])
         assert len(selected) == 1 and report.slices == 2 and report.slices_dropped == 1
+
+
+class TestIterSelectedFrames:
+    def test_fills_in_the_report_as_it_is_consumed(self):
+        report = QualityReport()
+        stream = iter_selected_frames([[frame(1, detailed())], [frame(10, solid(0))]], report=report)
+        assert report.slices == 0  # nothing is done until the generator is consumed
+        first = next(stream)
+        assert first.frame.index == 1 and report.slices == 1
+        assert list(stream) == [] and report.slices == 2 and report.slices_dropped == 1
+
+    def test_matches_select_frames(self):
+        groups = [[frame(1, detailed())], [frame(10, colour_bars())], [frame(20, detailed(4))]]
+        selected, report = select_frames(groups)
+        report2 = QualityReport()
+        streamed = list(iter_selected_frames(groups, report=report2))
+        assert [s.frame.index for s in streamed] == [s.frame.index for s in selected] == [1, 20]
+        assert report2 == report

@@ -16,10 +16,11 @@ Make sure you've completed the root [README.md](../README.md)'s "Quick Start"
   `hma_client.py`, logging, result writers, `metrics/`), the HMA build
   (`Dockerfile.hma`, `omm_config.py`, `resources/patches/`) and `unit_tests/`.
 - `hma/image/`: the image evaluation (`evaluate.py`, `tests/`, `resources/`).
-  Commands are in [image/TEST_COMMANDS.md](image/TEST_COMMANDS.md).
+  Commands are in [image/docs/TEST_COMMANDS.md](image/docs/TEST_COMMANDS.md).
 - `hma/video/`: the video evaluation, which hashes representative frames of
   each video and stores them in HMA. Setup and commands are in
-  [video/README.md](video/README.md); `make video-smoke-test` tries it without a dataset.
+  [video/README.md](video/README.md) (with [what it measures](video/docs/EVALUATION_DESCRIPTION.md) and
+  [how frames are chosen](video/docs/FRAME_SELECTION.md)); `make video-smoke-test` tries it without a dataset.
 
 ## Run Tests
 
@@ -282,4 +283,4 @@ docker compose exec hma-postgresql psql -U postgres -d media_match -c "\dt"
 
 ## Description of the tests
 
-Refer to [image/EVALUATION_DESCRIPTION.md](image/EVALUATION_DESCRIPTION.md) for an overview of the tests.
+Refer to [image/docs/EVALUATION_DESCRIPTION.md](image/docs/EVALUATION_DESCRIPTION.md) for an overview of the tests.

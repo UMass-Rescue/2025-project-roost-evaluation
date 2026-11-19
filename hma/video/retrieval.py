@@ -50,8 +50,9 @@ def rank_videos(
     Both rankings put the higher score first. Candidates that still tie are put in a fixed random
     order (the same for the same seed and query, whatever folder the videos are in), so the file
     names never decide a ranking.
-    CLOSEST_FRAME first breaks ties by the distance of the candidate's closest frame, and a
-    candidate none of whose frames were looked up ranks last among its score.
+    CLOSEST_FRAME first breaks ties by the distance of the candidate's closest frame among all the
+    lookup results (which reach to the largest distance swept, not only the distance of the score),
+    and a candidate none of whose frames were looked up ranks last among its score.
     """
     if ranking not in RANKINGS:
         raise ValueError(f"Unknown ranking {ranking!r}; expected one of {RANKINGS}")

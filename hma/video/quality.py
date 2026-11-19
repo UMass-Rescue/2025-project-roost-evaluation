@@ -32,7 +32,7 @@ class QualityConfig:
     """
     Thresholds, all measured on a grayscale copy `analysis_width` pixels wide (0-255 scale).
     256 is close to the 224 pixels CLIP looks at, so blur too fine to survive that
-    resizing is not penalised. How the defaults were chosen is in hma/video/README.md.
+    resizing is not penalised. How the defaults were chosen is in hma/video/docs/FRAME_SELECTION.md.
 
     flat_std_max: a frame whose brightness varies less than this is flat.
     bars_row_diff_max: a frame whose rows are nearly identical (mean absolute difference

@@ -3,7 +3,7 @@ import itertools
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from tqdm import tqdm
-from hma.image.tests.test_utils import get_image_files, hash_image, hash_images_batch
+from hma.image.tests.test_utils import get_image_files, hash_images_batch
 from hma.results_utils import write_results
 from hma.image.evaluate import Evaluator, _log_info, _log_debug, _log_warning
 

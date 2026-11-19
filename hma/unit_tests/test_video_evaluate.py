@@ -107,7 +107,9 @@ class TestEvaluate:
         run(dataset)
         everything = read_csv_rows(output / "match_precision_recall_clip_float_results.csv")
         selected = read_csv_rows(output / "match_precision_recall_selected_clip_float_results.csv")
-        positives = lambda curve: max(int(r["tp"]) + int(r["fn"]) for r in curve)
+        def positives(curve):
+            return max(int(r["tp"]) + int(r["fn"]) for r in curve)
+
         assert positives(selected) < positives(everything)
 
     def test_the_pairwise_results_are_anonymised_by_default(self, dataset, output):
@@ -126,8 +128,12 @@ class TestEvaluate:
         monkeypatch.setenv("DEANONYMIZE_IMAGE_PATHS", "1")
         run(dataset)
         pairs = read_csv_rows(output / "pairwise_clip_float_compare.csv")
-        series_of = lambda path: path.split("/")[-2]
-        clip_of = lambda path: path.split("/")[-1][5]
+        def series_of(path):
+            return path.split("/")[-2]
+
+        def clip_of(path):
+            return path.split("/")[-1][5]
+
         neighbours = [
             float(r["distance"])
             for r in pairs
@@ -137,7 +143,9 @@ class TestEvaluate:
         assert len(neighbours) == 4 * 2 and max(neighbours) < min(others)
 
     def test_a_video_with_no_usable_frame_still_counts_in_the_match_and_pairwise_metrics(self, tmp_path, output):
-        flat = lambda root: write_video(root / "series_0" / "clip_d.avi", [np.full((360, 640, 3), 128, np.uint8)] * 20)
+        def flat(root):
+            return write_video(root / "series_0" / "clip_d.avi", [np.full((360, 640, 3), 128, np.uint8)] * 20)
+
         dataset = make_series(tmp_path / "with_flat", extra=flat)
         _, index = run(dataset)
         assert [v.split("/")[-1] for v in index.unusable] == ["clip_d.avi"]

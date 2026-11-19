@@ -45,6 +45,8 @@ docker compose up --build -d
 docker compose run --rm -e BANK_NAME=SMOKE_TEST evaluation   # smoke test
 docker compose run --rm -e EVAL_MODE=test evaluation         # full test suite
 make smoke-test       # local equivalent, against localhost
+make unit-test        # HMA and Sentinel unit tests (what CI runs)
+make lint             # ruff check (what CI runs)
 make run-evaluation    # local equivalent, full suite
 make video-smoke-test  # video evaluation smoke test (generated sample clips)
 make fetch-video-dataset && make run-video-evaluation   # full video evaluation
@@ -52,6 +54,11 @@ make fetch-video-dataset && make run-video-evaluation   # full video evaluation
 
 See `hma/image/docs/TEST_COMMANDS.md`, `hma/video/README.md`, `sentinel/README.md`,
 `hma/image/docs/EVALUATION_DESCRIPTION.md`, and `hma/GPU_SETUP.md` for full detail — don't duplicate that detail here.
+
+## CI
+
+`.github/workflows/ci.yml` runs lint, unit tests and the image build on every PR; keep it
+green. PRs use `.github/pull_request_template.md`.
 
 ## Code conventions
 

@@ -1,8 +1,7 @@
 """Retrieval Precision-Recall metrics for topk/threshold test results."""
 import argparse
 import csv
-from pathlib import Path
-from typing import Dict, List, Set, Tuple, Optional
+from typing import Dict, List, Set, Optional
 
 import numpy as np
 

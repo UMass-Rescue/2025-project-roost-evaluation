@@ -4,15 +4,13 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from tqdm import tqdm
 from hma.image.tests.test_utils import get_image_files, hash_images_batch
 from hma.results_utils import write_results
-from hma.image.evaluate import Evaluator, get_logger, _log_info, _log_debug, _log_warning
+from hma.image.evaluate import Evaluator, _log_info, _log_debug, _log_warning
 
 def main():
     # Read signal_type from env (fresh each call)
     SIGNAL_TYPE = os.getenv("SIGNAL_TYPE", "clip_float")
     OUTPUT_FILE = os.getenv("OUTPUT_FILE", f"threshold_test_{SIGNAL_TYPE}_results.csv")
     
-    # Use existing logger if available, otherwise create a simple one
-    logger = get_logger()
     evaluator = Evaluator()
     image_files = get_image_files()
     

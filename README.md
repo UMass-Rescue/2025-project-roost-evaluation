@@ -46,7 +46,7 @@ This builds and starts, for both systems:
 
 ### 3. Run an Evaluation
 
-- **HMA**: see [hma/README.md](hma/README.md) and [hma/image/TEST_COMMANDS.md](hma/image/TEST_COMMANDS.md)
+- **HMA**: see [hma/README.md](hma/README.md) and [hma/image/docs/TEST_COMMANDS.md](hma/image/docs/TEST_COMMANDS.md)
   for test commands, metrics, and configuration. For video, see
   [hma/video/README.md](hma/video/README.md).
 - **Sentinel**: see [sentinel/README.md](sentinel/README.md) for test commands,

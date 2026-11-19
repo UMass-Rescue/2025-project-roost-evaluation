@@ -20,9 +20,13 @@ from hma.video.env import env_value
 
 SCENE_DETECTORS = ("content", "adaptive", "none")
 
+
+class UnreadableVideoError(ValueError):
+    """The file cannot be opened or has no usable frame rate or frame count."""
+
 # Detector sensitivity used when none is given. The adaptive value is lower than
 # PySceneDetect's own 3.0 because it found more of the cuts in real clips spliced at
-# known positions (see the README). Revisit with dissolves or another frame rate.
+# known positions (see docs/FRAME_SELECTION.md). Revisit with dissolves or another frame rate.
 DEFAULT_SCENE_THRESHOLDS = {"content": 27.0, "adaptive": 2.0}
 
 
@@ -90,19 +94,19 @@ class SampledFrame:
 
 
 def probe_video(path) -> VideoInfo:
-    """Read the frame rate and frame count; raises ValueError if the file cannot be used."""
+    """Read the frame rate and frame count; raises UnreadableVideoError if the file cannot be used."""
     cap = cv2.VideoCapture(str(path))
     try:
         if not cap.isOpened():
-            raise ValueError(f"Cannot open video: {path}")
+            raise UnreadableVideoError(f"Cannot open video: {path}")
         fps = cap.get(cv2.CAP_PROP_FPS)
         frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     finally:
         cap.release()
     if not fps or math.isnan(fps) or fps <= 0:
-        raise ValueError(f"Cannot determine the frame rate of {path}")
+        raise UnreadableVideoError(f"Cannot determine the frame rate of {path}")
     if frame_count <= 0:
-        raise ValueError(f"Cannot determine the frame count of {path}")
+        raise UnreadableVideoError(f"Cannot determine the frame count of {path}")
     return VideoInfo(fps=fps, frame_count=frame_count)
 
 
@@ -183,7 +187,7 @@ def iter_frames(path, indices: Iterable[int], fps: float) -> Iterator[SampledFra
     cap = cv2.VideoCapture(str(path))
     try:
         if not cap.isOpened():
-            raise ValueError(f"Cannot open video: {path}")
+            raise UnreadableVideoError(f"Cannot open video: {path}")
         position = 0
         for target in sorted(set(indices)):
             while position < target:

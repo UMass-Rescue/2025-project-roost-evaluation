@@ -16,6 +16,7 @@ import numpy as np
 
 from hma.hma_client import HMAClient
 from hma.logging_utils import _log_info, _log_warning
+from hma.video.frames import UnreadableVideoError
 from hma.video.pipeline import PipelineConfig, select_video_frames
 
 Match = tuple[str, float]  # bank content id, distance
@@ -67,6 +68,7 @@ def index_videos(
     """Select the frames of each video and add them to the bank, one bank item per frame.
 
     The bank does not remember which video an item came from, so the returned index does.
+    A video that cannot be read, or has no usable frame, is listed as unusable and left out.
     Raises if a frame cannot be added, because a frame missing from the bank would silently
     change every score.
     """
@@ -74,7 +76,12 @@ def index_videos(
     embed = hma_embedder(client, signal_type)
     index = VideoIndex()
     for video in map(str, videos):
-        result = select_video_frames(video, embed, config)
+        try:
+            result = select_video_frames(video, embed, config)
+        except UnreadableVideoError as error:
+            _log_warning(f"{error}. It is left out of the index.")
+            index.unusable.append(video)
+            continue
         summary = f"{video}: {result.report.summary()}"
         if result.report.no_usable_frames:
             _log_warning(f"{summary}. It is left out of the index.")
@@ -162,7 +169,10 @@ def closest_distances(
     exclude_video: str | None = None,
 ) -> dict[str, float]:
     """For each video that has any frame in the lookup results, the distance of its frame
-    closest to a query frame. The query's own video (exclude_video) is left out."""
+    closest to a query frame. The query's own video (exclude_video) is left out.
+
+    This looks at every match the lookup returned, so it reaches as far as the lookup distance,
+    which is the largest distance swept, not only the distance a score is computed at."""
     closest: dict[str, float] = {}
     for matches in frame_matches:
         for content_id, distance in matches:

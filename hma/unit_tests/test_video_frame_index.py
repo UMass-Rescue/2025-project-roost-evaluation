@@ -82,6 +82,19 @@ class TestIndexVideos:
         index = index_videos(hma, "BANK", [flat, good], config=CONFIG)
         assert index.unusable == [flat] and set(index.embeddings) == {good} and len(hma.bank) == 1
 
+    def test_a_video_that_cannot_be_read_is_reported_and_left_out(self, tmp_path, hma):
+        broken = tmp_path / "broken.avi"
+        broken.write_text("this is not a video")
+        good = scenes_video(tmp_path / "good.avi", [(1, 10)])
+        index = index_videos(hma, "BANK", [str(broken), good], config=CONFIG)
+        assert index.unusable == [str(broken)] and set(index.embeddings) == {good} and len(hma.bank) == 1
+
+    def test_an_error_that_is_not_about_the_file_is_not_swallowed(self, tmp_path, hma, monkeypatch):
+        video = scenes_video(tmp_path / "a.avi", [(1, 10)])
+        monkeypatch.setattr(hma, "hash_image_bytes", lambda images, signal_type: [])  # one vector per frame is required
+        with pytest.raises(ValueError, match="vectors"):
+            index_videos(hma, "BANK", [video], config=CONFIG)
+
     def test_a_failed_add_is_an_error(self, tmp_path, hma):
         hma.fail_adds = True
         video = scenes_video(tmp_path / "a.avi", [(1, 10)])

@@ -2,7 +2,7 @@
 
 Each video is reduced to a bag of frames (hma/video/pipeline.py), every frame is stored in an HMA
 bank, and each video is then used as a query against the others (leave one out). Three suites
-report mAP and precision/recall; see hma/video/README.md for what each one measures.
+report mAP and precision/recall; see hma/video/docs/EVALUATION_DESCRIPTION.md for what each one measures.
 """
 
 import os
@@ -215,6 +215,21 @@ def _match_suite(data: _Data, selection: Selection) -> None:
         print(f"  Match precision/recall at d={distance}" + (" (test series only)" if queries else "") + f": {csv_path.name}")
 
 
+# The largest cosine distance. A video with no frames is as far from every video as it can be.
+FARTHEST = 2.0
+
+
+def _pairs_with_unusable(videos: Sequence[str], index: VideoIndex) -> list[tuple[str, str, float]]:
+    """Each pair that has a video with no frames in it, once, at the farthest distance."""
+    unusable = [v for v in videos if v not in index.embeddings]
+    return [
+        (video, other, FARTHEST)
+        for i, video in enumerate(unusable)
+        for other in videos
+        if other != video and other not in unusable[:i]
+    ]
+
+
 def _pairwise_suite(data: _Data) -> None:
     """Distances between videos computed from the embeddings alone: mAP, precision/recall and their distribution."""
     if len(data.index.embeddings) < 2:
@@ -237,7 +252,9 @@ def _pairwise_suite(data: _Data) -> None:
     compute_map_from_rankings(
         data.series_to_videos, rankings, str(data.results_dir / f"map_by_series_pairwise_{SIGNAL_TYPE}_results.csv")
     )
-    labeled = classify_pairs_by_series(data.series_to_videos, pairs, normalize=str)
+    labeled = classify_pairs_by_series(
+        data.series_to_videos, [*pairs, *_pairs_with_unusable(data.videos, data.index)], normalize=str
+    )
     compute_precision_recall_from_labeled(
         labeled,
         str(data.results_dir / f"precision_recall_{SIGNAL_TYPE}_results.csv"),

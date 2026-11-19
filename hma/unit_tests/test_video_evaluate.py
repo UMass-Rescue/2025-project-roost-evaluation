@@ -136,7 +136,7 @@ class TestEvaluate:
         others = [float(r["distance"]) for r in pairs if series_of(r["video1"]) != series_of(r["video2"])]
         assert len(neighbours) == 4 * 2 and max(neighbours) < min(others)
 
-    def test_a_video_with_no_usable_frame_still_counts_in_the_match_metrics(self, tmp_path, output):
+    def test_a_video_with_no_usable_frame_still_counts_in_the_match_and_pairwise_metrics(self, tmp_path, output):
         flat = lambda root: write_video(root / "series_0" / "clip_d.avi", [np.full((360, 640, 3), 128, np.uint8)] * 20)
         dataset = make_series(tmp_path / "with_flat", extra=flat)
         _, index = run(dataset)
@@ -144,6 +144,9 @@ class TestEvaluate:
         curve = read_csv_rows(output / "match_precision_recall_clip_float_results.csv")
         # three series of three clips and one of four: 3 * 6 + 12 ordered same-series pairs, the flat clip's included
         assert max(int(r["tp"]) + int(r["fn"]) for r in curve) == 30
+        pairwise = read_csv_rows(output / "precision_recall_clip_float_results.csv")
+        # 3 series of three clips and one of four: 3 * 3 + 6 same-series pairs, the pairs with the flat clip included
+        assert max(int(r["tp"]) + int(r["fn"]) for r in pairwise) == 15
         assert len(read_csv_rows(output / "pairwise_clip_float_compare.csv")) == 12 * 11 // 2  # pairwise covers the 12 clips with frames
 
 

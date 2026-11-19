@@ -13,6 +13,7 @@ import pytest
 
 from hma.video.frames import (
     SamplingConfig,
+    UnreadableVideoError,
     candidate_frame_groups,
     detect_scenes,
     iter_frame_groups,
@@ -111,13 +112,13 @@ class TestProbe:
         assert info.frame_count == 30
 
     def test_missing_file(self, tmp_path):
-        with pytest.raises(ValueError):
+        with pytest.raises(UnreadableVideoError):
             probe_video(tmp_path / "missing.avi")
 
     def test_file_that_is_not_a_video(self, tmp_path):
         bogus = tmp_path / "bogus.avi"
         bogus.write_text("this is not a video")
-        with pytest.raises(ValueError):
+        with pytest.raises(UnreadableVideoError):
             probe_video(bogus)
 
 

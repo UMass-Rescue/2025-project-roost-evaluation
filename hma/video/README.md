@@ -10,10 +10,25 @@ Where these docs refer to "the series dataset" they mean UMass Rescue Lab's
 SA-V dataset and grouped into 100 series, each series being the consecutive segments of one
 source video.
 
+## How it works
+
+```mermaid
+flowchart LR
+    A[Each video] --> B["Choose frames<br/>(sample, drop junk, drop repeats)"]
+    B --> C["HMA hashes each frame<br/>(clip_float)"]
+    C --> D[("HMA bank<br/>one item per frame")]
+    E[A video as the query] --> F[Look up each of its frames]
+    D --> F
+    F --> G["Score every other video<br/>(share of the query's frames it matched)"]
+    G --> H["mAP and precision/recall<br/>(same series = right answer)"]
+```
+
 ## Quick start
 
 Start HMA first (the root [README.md](../../README.md)'s Quick Start). Each run **resets HMA's
 database**, as the image evaluation does, so it replaces whatever other evaluations left in it.
+HMA is reached over plain HTTP and receives the frames as images, so keep it on localhost or the
+Docker network.
 
 ```bash
 make video-smoke-test         # about 1 minute, no dataset needed: see "Smoke test" below

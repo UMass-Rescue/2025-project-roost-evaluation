@@ -1,7 +1,7 @@
 # HMA Evaluation
 
-This evaluates content matching capabilities using HMA (Hasher-Matcher-Actioner)
-from Facebook's ThreatExchange repository, built from a locked commit via
+This evaluates content matching capabilities, for images and for video, using HMA
+(Hasher-Matcher-Actioner) from Facebook's ThreatExchange repository, built from a locked commit via
 `docker-compose.yaml` at the repo root.
 
 Make sure you've completed the root [README.md](../README.md)'s "Quick Start"
@@ -234,7 +234,10 @@ With `CLIP_DISABLE_HNSW_INDEX: 'true'` you'll see `CLIPFloatIndex (exact/flat)` 
 
 ## Environment Variables
 
-(`EVAL_MODE` and `OUTPUT_DIR` are shared with Sentinel — see the root [README.md](../README.md).)
+(`EVAL_MODE` and `OUTPUT_DIR` are shared with Sentinel — see the root [README.md](../README.md).
+The variables below are the image evaluation's; the video evaluation's are in
+[video/docs/EVALUATION_DESCRIPTION.md](video/docs/EVALUATION_DESCRIPTION.md) and
+[video/docs/FRAME_SELECTION.md](video/docs/FRAME_SELECTION.md).)
 
 ### Test Configuration
 - `BANK_NAME`: Bank name for testing (default: `TEST_BANK_DATA`)
@@ -253,8 +256,8 @@ With `CLIP_DISABLE_HNSW_INDEX: 'true'` you'll see `CLIPFloatIndex (exact/flat)` 
 - Results: `OUTPUT_DIR/evaluation_results/<timestamp>/...`
 - Logs: `OUTPUT_DIR/test_run_logs/`
 - Mapping: `OUTPUT_DIR/file_to_id_map/anon_id_map.json` (default if not overridden)
-- `DEANONYMIZE_IMAGE_PATHS`: Set to `1` to disable anonymization (filename anonymization is ON by default).
-- `ANON_ID_MAP_FILEPATH`: Optional override for the mapping file path. If set, uses this as a persistent path→ID store (loads existing mappings and updates after runs). The file contains `{ "<full_path>": "<id>" }`. **DON'T SHARE THIS FILE** if you don't want to leak original image paths.
+- `DEANONYMIZE_IMAGE_PATHS`: Set to `1` to disable anonymization (filename anonymization is ON by default; it covers video paths too).
+- `ANON_ID_MAP_FILEPATH`: Optional override for the mapping file path. If set, uses this as a persistent path→ID store (loads existing mappings and updates after runs). The file contains `{ "<full_path>": "<id>" }`. **DON'T SHARE THIS FILE** if you don't want to leak original image or video paths.
 
 ## Results
 

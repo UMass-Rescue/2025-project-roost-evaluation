@@ -56,7 +56,7 @@ def load_content_id_mapping(results_dir: Path, signal_type: str, name: str = "co
         try:
             with open(content_id_map_file, 'r') as f:
                 return json.load(f)
-        except Exception as e:
+        except Exception:
             # Logging will be handled by caller
             return {}
     return {}

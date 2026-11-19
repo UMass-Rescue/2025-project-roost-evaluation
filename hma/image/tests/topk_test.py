@@ -12,8 +12,7 @@ def main():
     OUTPUT_FILE = os.getenv("OUTPUT_FILE", f"topk_test_{SIGNAL_TYPE}_results.csv")
     MAX_K = int(os.getenv("MAX_K", 5))
     
-    # Use existing logger if available, otherwise create a simple one
-    logger = get_logger()
+    get_logger()
     evaluator = Evaluator()
     image_files = get_image_files()
     k_values = range(1, MAX_K + 1)

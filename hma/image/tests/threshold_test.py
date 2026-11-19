@@ -11,8 +11,7 @@ def main():
     SIGNAL_TYPE = os.getenv("SIGNAL_TYPE", "clip_float")
     OUTPUT_FILE = os.getenv("OUTPUT_FILE", f"threshold_test_{SIGNAL_TYPE}_results.csv")
     
-    # Use existing logger if available, otherwise create a simple one
-    logger = get_logger()
+    get_logger()
     evaluator = Evaluator()
     image_files = get_image_files()
     

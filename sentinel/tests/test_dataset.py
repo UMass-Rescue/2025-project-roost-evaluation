@@ -6,7 +6,6 @@ unreviewed 10l conversation) to verify the loader only trusts the manifest,
 never the raw folder contents.
 """
 
-import os
 from pathlib import Path
 
 import pytest

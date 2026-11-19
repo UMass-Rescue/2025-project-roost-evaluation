@@ -1,7 +1,6 @@
 """Mean Average Precision (mAP) computation for image retrieval."""
 import argparse
 import csv
-from pathlib import Path
 from typing import Dict, List, Set, Tuple, Optional
 
 from hma.metrics.common import (

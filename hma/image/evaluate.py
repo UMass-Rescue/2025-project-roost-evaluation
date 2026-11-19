@@ -6,7 +6,7 @@ import json
 import time
 from pathlib import Path
 from hma.image.series_labels_utils import get_image_files, ensure_labels_file
-from hma.logging_utils import setup_logging, get_logger, get_log_file, _log_debug, _log_info, _log_warning, _log_error
+from hma.logging_utils import setup_logging, get_logger, get_log_file, _log_debug, _log_info, _log_warning, _log_error  # noqa: F401 (get_logger is re-exported to the suites)
 from hma.hma_client import HMAClient, match_url
 from datetime import datetime
 
@@ -103,7 +103,7 @@ def calculate_metrics(results_dir):
         if content_id_to_image:
             _log_info(f"Loaded content_id mapping ({len(content_id_to_image)} entries)")
         else:
-            _log_warning(f"Content ID mapping file not found or empty. MAP calculation may be inaccurate.")
+            _log_warning("Content ID mapping file not found or empty. MAP calculation may be inaccurate.")
             content_id_to_image = {}
         
         try:
@@ -117,7 +117,7 @@ def calculate_metrics(results_dir):
                 anon_map_path=str(anon_map_path) if anon_map_path.exists() else None,
                 content_id_to_image=content_id_to_image
             )
-            print(f"✓")
+            print("✓")
             _log_info(f"Saved to: {map_output_csv}")
             print(f"    → {map_output_csv.name}")
         except Exception as e:
@@ -138,7 +138,7 @@ def calculate_metrics(results_dir):
             str(anon_map_path) if anon_map_path.exists() else None,
             SIGNAL_TYPE,
         )
-        print(f"✓")
+        print("✓")
         _log_info(f"Saved CSV: {pr_csv}")
         _log_info(f"Saved plot: {pr_plot}")
         print(f"    → {pr_csv.name}")
@@ -159,7 +159,7 @@ def calculate_metrics(results_dir):
             SIGNAL_TYPE,
             str(anon_map_path) if anon_map_path.exists() else None
         )
-        print(f"✓")
+        print("✓")
         _log_info(f"Saved plot: {dist_output_plot}")
         print(f"    → {dist_output_plot.name}")
     except Exception as e:
@@ -274,7 +274,7 @@ def main():
     
     if eval_mode == "smoke":
         _log_info("[STARTUP] Creating fresh database for smoke test...")
-        print(f"Running smoke test...")
+        print("Running smoke test...")
         evaluator = Evaluator()
         evaluator.cleanup_test_environment()
         

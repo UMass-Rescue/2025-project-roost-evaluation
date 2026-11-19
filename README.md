@@ -63,10 +63,10 @@ system-specific (see the linked docs above):
 ## Continuous Integration
 
 GitHub Actions ([.github/workflows/ci.yml](.github/workflows/ci.yml)) runs on every
-pull request and on pushes to `main`: a `ruff check` lint (rules in [ruff.toml](ruff.toml)), the HMA and Sentinel unit tests on Python 3.10,
-and a build of the `evaluation` image. Run the same tests locally with the commands in
-[hma/README.md](hma/README.md) and [sentinel/README.md](sentinel/README.md). The
-HMA-backed smoke tests need the running stack, so they are not part of CI.
+pull request and on pushes to `main`: lint, the HMA and Sentinel unit tests, and a build
+of the `evaluation` image. Run the same checks locally with `make lint` and
+`make unit-test`. The HMA-backed smoke tests need the running stack, so they are not part
+of CI.
 
 ## Troubleshooting
 

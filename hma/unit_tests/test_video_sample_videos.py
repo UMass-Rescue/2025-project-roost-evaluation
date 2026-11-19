@@ -2,7 +2,6 @@
 
 import cv2
 import numpy as np
-import pytest
 
 from hma.video import sample_videos
 from hma.video.pipeline import PipelineConfig, select_video_frames
@@ -60,7 +59,9 @@ class TestMakeSampleVideos:
         clip = {p.rsplit("/", 2)[-2] + "/" + p.rsplit("/", 1)[-1]: first_frames(p) for p in paths}
         seconds = sample_videos.FPS  # frames per scene
         a, b, c = (clip[f"series_0001/clip_00{i}.avi"] for i in (1, 2, 3))
-        distance = lambda x, y: np.abs(x.astype(int) - y.astype(int)).mean()
+        def distance(x, y):
+            return np.abs(x.astype(int) - y.astype(int)).mean()
+
         assert distance(a[-1], b[0]) < 3  # a's second scene is b's first (up to video compression)
         assert distance(b[-1], c[0]) < 3
         assert distance(a[0], c[0]) > 20 and distance(a[0], a[-1]) > 20

@@ -42,7 +42,7 @@ def test_setup_logging_writes_a_log_file(tmp_path, monkeypatch):
 
 
 def test_image_evaluate_still_exposes_what_the_suites_import():
-    from hma.image.evaluate import Evaluator, get_logger, _log_debug, _log_info, _log_warning
+    from hma.image.evaluate import Evaluator, get_logger
 
     assert issubclass(Evaluator, HMAClient)
     assert callable(get_logger)

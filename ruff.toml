@@ -1,0 +1,10 @@
+# Correctness-focused rules only (pyflakes plus the pycodestyle error subset).
+target-version = "py310"
+extend-exclude = [".venv", "results", "sentinel/dataset", "hma/video/resources/video-series-dataset"]
+
+[lint]
+select = ["E4", "E7", "E9", "F"]
+
+[lint.per-file-ignores]
+# These imports register signal types with the HMA plugin loader.
+"hma/omm_config.py" = ["F401"]

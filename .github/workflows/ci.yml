@@ -17,10 +17,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/ruff-action@v3
+      - uses: actions/setup-python@v5
         with:
-          version: "0.17.6"
-          args: check
+          python-version: "3.10"
+      - run: make lint
 
   unit-tests:
     runs-on: ubuntu-latest
@@ -36,19 +36,12 @@ jobs:
             requirements-scenedetect.txt
             hma/requirements-dev.txt
             sentinel/requirements-dev.txt
-      - name: Install dependencies
-        run: |
-          pip install -r requirements.txt -r hma/requirements-dev.txt -r sentinel/requirements-dev.txt
-          pip install --no-deps -r requirements-scenedetect.txt
-      # The two suites share module names (test_metrics.py), so they run separately.
       - name: Unit tests
         shell: bash
         run: |
           status=0
-          for suite in hma/unit_tests sentinel/tests; do
-            PYTHONPATH=. python -m pytest "$suite" -v | tee pytest.log || status=$?
-            echo "$suite: $(tail -n 1 pytest.log | tr -d '=')" >> "$GITHUB_STEP_SUMMARY"
-          done
+          make unit-test | tee pytest.log || status=$?
+          grep -E '^=+ .* in [0-9.]+s' pytest.log | tr -d '=' >> "$GITHUB_STEP_SUMMARY"
           exit $status
 
   docker-build:

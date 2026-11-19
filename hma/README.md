@@ -66,9 +66,12 @@ make run-evaluation   # Runs all tests locally
 The unit tests in `hma/unit_tests/` mock the HMA HTTP layer and need no running services:
 
 ```bash
-pip install -r hma/requirements-dev.txt
-PYTHONPATH=. python -m pytest hma/unit_tests/ -v
+make unit-test   # HMA and Sentinel unit tests in a local venv, the same command CI runs
+make lint        # ruff check, rules in ruff.toml
 ```
+
+To run only the HMA tests: `pip install -r hma/requirements-dev.txt`, then
+`PYTHONPATH=. python -m pytest hma/unit_tests/ -v`.
 
 ## Performance Metrics & Visualizations
 

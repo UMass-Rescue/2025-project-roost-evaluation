@@ -55,9 +55,8 @@ See `hma/image/docs/TEST_COMMANDS.md`, `hma/video/README.md`, `sentinel/README.m
 
 ## CI
 
-`.github/workflows/ci.yml` runs the HMA and Sentinel unit tests (separately, they share
-module names) and the `evaluation` image build on every PR. Keep both green; PRs use
-`.github/pull_request_template.md`.
+`.github/workflows/ci.yml` runs lint, unit tests and the image build on every PR; keep it
+green. PRs use `.github/pull_request_template.md`.
 
 ## Code conventions
 

@@ -1,4 +1,4 @@
-.PHONY: create-env activate-env smoke-test run-evaluation
+.PHONY: create-env activate-env smoke-test run-evaluation fetch-video-dataset video-smoke-test run-video-evaluation
 
 PYTHON ?= python3
 VENV_DIR ?= .venv
@@ -12,6 +12,7 @@ create-env:
 	$(PYTHON) -m venv $(VENV_DIR)
 	$(PIP) install --upgrade pip
 	$(PIP) install -r requirements.txt
+	$(PIP) install --no-deps -r requirements-scenedetect.txt
 
 activate-env: create-env
 	@echo "Environment ready in $(VENV_DIR)."
@@ -20,10 +21,19 @@ activate-env: create-env
 
 smoke-test: activate-env
 	@echo "Running smoke test locally against HMA at $(HMA_HOST):$(HMA_PORT)..."
-	PYTHONPATH=. OUTPUT_DIR=$(OUTPUT_DIR) HMA_HOST=$(HMA_HOST) HMA_PORT=$(HMA_PORT) POSTGRES_HOST=localhost POSTGRES_PORT=55432 BANK_NAME=SMOKE_TEST $(PY) hma/evaluate.py
+	PYTHONPATH=. OUTPUT_DIR=$(OUTPUT_DIR) HMA_HOST=$(HMA_HOST) HMA_PORT=$(HMA_PORT) POSTGRES_HOST=localhost POSTGRES_PORT=55432 BANK_NAME=SMOKE_TEST $(PY) hma/image/evaluate.py
 
 run-evaluation: activate-env
 	@echo "Running full evaluation locally against HMA at $(HMA_HOST):$(HMA_PORT)..."
-	PYTHONPATH=. OUTPUT_DIR=$(OUTPUT_DIR) HMA_HOST=$(HMA_HOST) HMA_PORT=$(HMA_PORT) POSTGRES_HOST=localhost POSTGRES_PORT=55432 EVAL_MODE=test $(PY) hma/evaluate.py
+	PYTHONPATH=. OUTPUT_DIR=$(OUTPUT_DIR) HMA_HOST=$(HMA_HOST) HMA_PORT=$(HMA_PORT) POSTGRES_HOST=localhost POSTGRES_PORT=55432 EVAL_MODE=test $(PY) hma/image/evaluate.py
 
+fetch-video-dataset:
+	bash hma/video/resources/fetch_dataset.sh
 
+video-smoke-test: activate-env
+	@echo "Running video smoke test locally against HMA at $(HMA_HOST):$(HMA_PORT)..."
+	PYTHONPATH=. OUTPUT_DIR=$(OUTPUT_DIR) HMA_HOST=$(HMA_HOST) HMA_PORT=$(HMA_PORT) POSTGRES_HOST=localhost POSTGRES_PORT=55432 $(PY) hma/video/smoke_test.py
+
+run-video-evaluation: activate-env
+	@echo "Running video evaluation locally against HMA at $(HMA_HOST):$(HMA_PORT)..."
+	PYTHONPATH=. OUTPUT_DIR=$(OUTPUT_DIR) HMA_HOST=$(HMA_HOST) HMA_PORT=$(HMA_PORT) POSTGRES_HOST=localhost POSTGRES_PORT=55432 $(PY) hma/video/evaluate.py

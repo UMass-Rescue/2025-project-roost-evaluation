@@ -2,7 +2,7 @@
 import json
 import csv
 from pathlib import Path
-from typing import Dict, List, Set, Tuple, Optional
+from typing import Callable, Dict, Iterable, List, Set, Tuple, Optional
 
 
 def normalize_label_path(path_str: str) -> str:
@@ -259,7 +259,7 @@ def build_image_to_series_map(series_to_images: Dict[str, Set[str]]) -> Dict[str
 def validate_series_metadata_exists(labels_path: str = None) -> None:
     """Validate series metadata file exists and has valid data."""
     if labels_path is None:
-        labels_path = "hma/resources/labels/images_series_labels.json"
+        labels_path = "hma/image/resources/labels/images_series_labels.json"
     
     if not Path(labels_path).exists():
         raise ValueError(f"Series metadata not found: {labels_path}")
@@ -308,26 +308,48 @@ def classify_pairwise_by_series(
     Returns:
         List of (distance, is_same_series) tuples for all valid pairs
     """
-    image_to_series = build_image_to_series_map(series_to_images)
-    
+    def pairs():
+        for entry in pairwise_entries:
+            # Apply anon-ID mapping if provided
+            img1_src = id_to_path.get(entry["image1"], entry["image1"]) if id_to_path else entry["image1"]
+            img2_src = id_to_path.get(entry["image2"], entry["image2"]) if id_to_path else entry["image2"]
+            yield img1_src, img2_src, entry["distance"]
+
+    return classify_pairs_by_series(series_to_images, pairs())
+
+
+def classify_pairs_by_series(
+    series_to_items: Dict[str, Set[str]],
+    pairs: Iterable[Tuple[str, str, float]],
+    normalize: Callable[[str], str] = normalize_pairwise_path,
+) -> List[Tuple[float, bool]]:
+    """
+    Classify (item1, item2, distance) pairs as same-series (True) or different-series (False).
+
+    Works on in-memory pairs of any kind of item (images, videos), so an evaluation
+    does not have to write and re-read a pairwise file. Paths are normalized the same
+    way as in classify_pairwise_by_series, unless normalize says otherwise (pass `str`
+    when the items already match the series' items exactly); pairs with an item outside
+    every series are skipped. Distances must be "smaller is more similar".
+
+    Returns:
+        List of (distance, is_same_series) tuples
+    """
+    item_to_series = build_image_to_series_map(series_to_items)
+
     classified: List[Tuple[float, bool]] = []
-    
-    for entry in pairwise_entries:
-        # Apply anon-ID mapping if provided
-        img1_src = id_to_path.get(entry["image1"], entry["image1"]) if id_to_path else entry["image1"]
-        img2_src = id_to_path.get(entry["image2"], entry["image2"]) if id_to_path else entry["image2"]
-        
+
+    for item1_src, item2_src, distance in pairs:
         # Normalize paths to handle container mount prefixes
-        img1 = normalize_pairwise_path(img1_src)
-        img2 = normalize_pairwise_path(img2_src)
-        
-        # Skip if either image is not in any series
-        if img1 not in image_to_series or img2 not in image_to_series:
+        item1 = normalize(item1_src)
+        item2 = normalize(item2_src)
+
+        # Skip if either item is not in any series
+        if item1 not in item_to_series or item2 not in item_to_series:
             continue
-        
-        same_series = image_to_series[img1] == image_to_series[img2]
-        classified.append((float(entry["distance"]), same_series))
-    
+
+        classified.append((float(distance), item_to_series[item1] == item_to_series[item2]))
+
     return classified
 
 

@@ -1,6 +1,6 @@
 import argparse
 from pathlib import Path
-from typing import Dict, List, Set, Tuple, Optional
+from typing import List, Tuple, Optional
 
 try:
     import matplotlib
@@ -11,23 +11,6 @@ except ImportError:
     MATPLOTLIB_AVAILABLE = False
 
 from hma.metrics.common import load_and_validate_data, ensure_output_dir, classify_pairwise_by_series
-
-
-def classify_pairwise_distances(
-    series_to_images: Dict[str, Set[str]],
-    pairwise_entries: List[dict],
-    id_to_path: Optional[Dict[str, str]] = None,
-) -> Tuple[List[float], List[float]]:
-    """
-    Classify pairwise distances into same-series and different-series.
-    Returns: (same_series_distances, different_series_distances)
-    """
-    labeled = classify_pairwise_by_series(series_to_images, pairwise_entries, id_to_path)
-    
-    same_series_distances = [distance for distance, is_same in labeled if is_same]
-    different_series_distances = [distance for distance, is_same in labeled if not is_same]
-    
-    return same_series_distances, different_series_distances
 
 
 def plot_distance_distributions(
@@ -75,6 +58,25 @@ def plot_distance_distributions(
     plt.close()
 
 
+def compute_distance_distribution_from_labeled(
+    labeled: List[Tuple[float, bool]],
+    output_plot: str,
+    signal_type: str = "",
+) -> Tuple[List[float], List[float]]:
+    """
+    Plot same-series vs different-series distances from (distance, is_same_series) pairs.
+    Returns: (same_series_distances, different_series_distances)
+    """
+    same_distances = [distance for distance, is_same in labeled if is_same]
+    diff_distances = [distance for distance, is_same in labeled if not is_same]
+
+    print(f"Same-series pairs: {len(same_distances)}")
+    print(f"Different-series pairs: {len(diff_distances)}")
+
+    plot_distance_distributions(same_distances, diff_distances, output_plot, signal_type)
+    return same_distances, diff_distances
+
+
 def compute_distance_distribution(
     labels_path: str,
     pairwise_path: str,
@@ -87,14 +89,8 @@ def compute_distance_distribution(
         labels_path, pairwise_path, anon_map_path
     )
     
-    same_distances, diff_distances = classify_pairwise_distances(
-        series_to_images, entries, id_to_path
-    )
-    
-    print(f"Same-series pairs: {len(same_distances)}")
-    print(f"Different-series pairs: {len(diff_distances)}")
-    
-    plot_distance_distributions(same_distances, diff_distances, output_plot, signal_type)
+    labeled = classify_pairwise_by_series(series_to_images, entries, id_to_path)
+    compute_distance_distribution_from_labeled(labeled, output_plot, signal_type)
 
 
 def main():

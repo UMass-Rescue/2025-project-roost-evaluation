@@ -14,13 +14,11 @@ import pytest
 from hma.video.frames import (
     SamplingConfig,
     candidate_frame_groups,
-    candidate_frame_indices,
     detect_scenes,
     iter_frame_groups,
     iter_frames,
     probe_video,
     sample_frame_groups,
-    sample_frames,
 )
 from video_testing import write_video
 
@@ -37,6 +35,14 @@ def make_video(path, segments, fps=FPS, size=SIZE):
     for colour, count in segments:
         frames.extend([np.full((size[1], size[0], 3), colour, np.uint8)] * count)
     return write_video(path, frames, fps)
+
+
+ZERO_WINDOW = SamplingConfig(candidate_window_seconds=0)
+
+
+def sampled(path, config=None):
+    """The frames of every group of sample_frame_groups, flattened."""
+    return [frame for group in sample_frame_groups(path, config) for frame in group]
 
 
 @pytest.fixture
@@ -99,12 +105,10 @@ class TestSamplingConfig:
 
 
 class TestProbe:
-    def test_reads_rate_count_and_size(self, tmp_path):
+    def test_reads_rate_and_count(self, tmp_path):
         info = probe_video(make_video(tmp_path / "v.avi", [(RED, 30)]))
         assert info.fps == pytest.approx(FPS)
         assert info.frame_count == 30
-        assert (info.width, info.height) == SIZE
-        assert info.duration_seconds == pytest.approx(3.0)
 
     def test_missing_file(self, tmp_path):
         with pytest.raises(ValueError):
@@ -117,25 +121,30 @@ class TestProbe:
             probe_video(bogus)
 
 
-class TestCandidateFrameIndices:
+def midpoints(scenes, fps, max_frame_gap_seconds):
+    """The midpoint of every slice: the candidate groups with no window around them."""
+    return [group[0] for group in candidate_frame_groups(scenes, fps, max_frame_gap_seconds, 0.0)]
+
+
+class TestMidpoints:
     def test_three_second_scene_gets_three_midpoints(self):
-        assert candidate_frame_indices([(0, 18)], fps=6, max_frame_gap_seconds=1.0) == [3, 9, 15]
+        assert midpoints([(0, 18)], fps=6, max_frame_gap_seconds=1.0) == [3, 9, 15]
 
     def test_scene_shorter_than_the_gap_gets_its_midpoint(self):
-        assert candidate_frame_indices([(0, 2)], fps=10, max_frame_gap_seconds=1.0) == [1]
-        assert candidate_frame_indices([(40, 43)], fps=10, max_frame_gap_seconds=1.0) == [41]
+        assert midpoints([(0, 2)], fps=10, max_frame_gap_seconds=1.0) == [1]
+        assert midpoints([(40, 43)], fps=10, max_frame_gap_seconds=1.0) == [41]
 
     def test_each_scene_is_sampled_on_its_own(self):
-        assert candidate_frame_indices([(0, 30), (30, 60)], 10, 1.0) == [5, 15, 25, 35, 45, 55]
+        assert midpoints([(0, 30), (30, 60)], 10, 1.0) == [5, 15, 25, 35, 45, 55]
 
     def test_a_larger_gap_gives_fewer_frames(self):
-        assert candidate_frame_indices([(0, 30)], fps=10, max_frame_gap_seconds=2.0) == [7, 22]
+        assert midpoints([(0, 30)], fps=10, max_frame_gap_seconds=2.0) == [7, 22]
 
     def test_just_over_a_multiple_of_the_gap_adds_a_slice(self):
-        assert len(candidate_frame_indices([(0, 31)], fps=10, max_frame_gap_seconds=1.0)) == 4
+        assert len(midpoints([(0, 31)], fps=10, max_frame_gap_seconds=1.0)) == 4
 
     def test_empty_and_inverted_scenes_are_skipped(self):
-        assert candidate_frame_indices([(5, 5), (9, 3)], 10, 1.0) == []
+        assert midpoints([(5, 5), (9, 3)], 10, 1.0) == []
 
     def test_indices_are_sorted_unique_and_inside_their_scene(self):
         rng = random.Random(0)
@@ -144,7 +153,7 @@ class TestCandidateFrameIndices:
             scenes = [(s, s + rng.randint(1, 400)) for s in starts]
             scenes = [(s, min(e, nxt)) for (s, e), nxt in zip(scenes, starts[1:] + [10**9])]
             gap = rng.choice([0.5, 1.0, 2.5])
-            indices = candidate_frame_indices(scenes, rng.choice([6, 24, 29.97]), gap)
+            indices = midpoints(scenes, rng.choice([6, 24, 29.97]), gap)
             assert indices == sorted(set(indices))
             for index in indices:
                 assert any(s <= index < e for s, e in scenes)
@@ -160,9 +169,6 @@ class TestCandidateFrameGroups:
 
     def test_a_window_of_zero_is_the_midpoints_alone(self):
         assert candidate_frame_groups([(0, 30)], 10, 1.0, 0.0) == [[5], [15], [25]]
-        assert [g[0] for g in candidate_frame_groups([(0, 30), (30, 60)], 10, 1.0, 0.0)] == candidate_frame_indices(
-            [(0, 30), (30, 60)], 10, 1.0
-        )
 
     def test_a_group_never_leaves_its_slice(self):
         groups = candidate_frame_groups([(0, 30)], fps=10, max_frame_gap_seconds=1.0, window_seconds=10)
@@ -181,7 +187,7 @@ class TestCandidateFrameGroups:
             groups = candidate_frame_groups(scenes, fps, gap, window)
             flat = [i for g in groups for i in g]
             assert flat == sorted(set(flat))
-            mids = candidate_frame_indices(scenes, fps, gap)
+            mids = midpoints(scenes, fps, gap)
             assert [m in g for m, g in zip(mids, groups)] == [True] * len(groups)
 
     def test_never_more_slices_than_frames(self):
@@ -292,38 +298,28 @@ class TestSampleFrameGroups:
             [4, 5, 6], [14, 15, 16], [24, 25, 26], [34, 35, 36], [44, 45, 46], [54, 55, 56]
         ]
 
-    def test_a_zero_window_matches_sample_frames(self, two_scenes):
-        config = SamplingConfig(candidate_window_seconds=0)
-        flat = [f.index for g in sample_frame_groups(two_scenes, config) for f in g]
-        assert flat == [f.index for f in sample_frames(two_scenes, config)]
-
-    def test_unreadable_file(self, tmp_path):
-        with pytest.raises(ValueError):
-            sample_frame_groups(tmp_path / "missing.avi", SamplingConfig())
-
-
-class TestSampleFrames:
-    def test_samples_each_scene(self, two_scenes):
-        frames = list(sample_frames(two_scenes, SamplingConfig()))
-        assert [f.index for f in frames] == [5, 15, 25, 35, 45, 55]
-        assert all(f.image[..., 2].mean() > 150 for f in frames[:3])  # red scene
-        assert all(f.image[..., 0].mean() > 150 for f in frames[3:])  # blue scene
+    def test_a_zero_window_samples_the_midpoints_alone(self, two_scenes):
+        groups = list(sample_frame_groups(two_scenes, ZERO_WINDOW))
+        assert [[f.index for f in g] for g in groups] == [[5], [15], [25], [35], [45], [55]]
+        assert all(f.image[..., 2].mean() > 150 for g in groups[:3] for f in g)  # red scene
+        assert all(f.image[..., 0].mean() > 150 for g in groups[3:] for f in g)  # blue scene
 
     def test_detector_none_samples_uniformly(self, tmp_path):
         path = make_video(tmp_path / "three.avi", [(RED, 20), (BLUE, 20), (GREEN, 20)])
-        frames = list(sample_frames(path, SamplingConfig(scene_detector="none", max_frame_gap_seconds=2.0)))
-        assert [f.index for f in frames] == [10, 30, 50]
+        config = SamplingConfig(scene_detector="none", max_frame_gap_seconds=2.0, candidate_window_seconds=0)
+        assert [f.index for f in sampled(path, config)] == [10, 30, 50]
 
     def test_uses_the_environment_when_no_config_is_given(self, two_scenes, monkeypatch):
         monkeypatch.setenv("VIDEO_SCENE_DETECTOR", "none")
         monkeypatch.setenv("VIDEO_MAX_FRAME_GAP_SECONDS", "3")
-        assert [f.index for f in sample_frames(two_scenes)] == [15, 45]
+        monkeypatch.setenv("VIDEO_CANDIDATE_WINDOW_SECONDS", "0")
+        assert [f.index for f in sampled(two_scenes)] == [15, 45]
 
     def test_a_short_clip_gets_its_frames(self, tmp_path):
-        # like the 3 s, 6 fps series clips: one scene, three frames
+        # like the 3 s, 6 fps series clips: one scene, three slices
         path = make_video(tmp_path / "clip.avi", [(GREEN, 18)], fps=6)
-        assert [f.index for f in sample_frames(path, SamplingConfig())] == [3, 9, 15]
+        assert [f.index for f in sampled(path, ZERO_WINDOW)] == [3, 9, 15]
 
     def test_unreadable_file(self, tmp_path):
         with pytest.raises(ValueError):
-            sample_frames(tmp_path / "missing.avi", SamplingConfig())
+            sample_frame_groups(tmp_path / "missing.avi", SamplingConfig())

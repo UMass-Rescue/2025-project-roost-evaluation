@@ -14,7 +14,7 @@ of its own later.
 """
 from collections import Counter
 from dataclasses import dataclass, field
-from typing import Iterable, Iterator, List, Optional, Sequence, Tuple
+from typing import Iterable, Iterator, Optional, Sequence, Tuple
 
 import cv2
 import numpy as np
@@ -163,11 +163,3 @@ def iter_selected_frames(
             report.slices_dropped += 1
         else:
             yield best
-
-
-def select_frames(
-    groups: Iterable[Sequence[SampledFrame]], config: Optional[QualityConfig] = None
-) -> Tuple[List[SelectedFrame], QualityReport]:
-    """iter_selected_frames, collected into a list together with its report."""
-    report = QualityReport()
-    return list(iter_selected_frames(groups, config, report)), report

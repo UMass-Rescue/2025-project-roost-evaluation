@@ -149,12 +149,12 @@ thresholds on footage that looks different, such as night scenes or screen recor
 
 ```python
 from hma.video.frames import sample_frame_groups
-from hma.video.quality import select_frames
+from hma.video.quality import QualityReport, iter_selected_frames
 
-selected, report = select_frames(sample_frame_groups("path/to/video.mp4"))
-print(report.summary())
-for item in selected:
+report = QualityReport()
+for item in iter_selected_frames(sample_frame_groups("path/to/video.mp4"), report=report):
     print(item.frame.index, round(item.frame.seconds, 2), round(item.quality.sharpness))
+print(report.summary())  # filled in as the frames are consumed
 ```
 
 ## Removing repeats
@@ -222,14 +222,15 @@ reason, slices dropped, pixel and embedding duplicates, frames thinned to the ca
 kept. A video with nothing usable returns no frames and `report.no_usable_frames` is true, so
 the caller can tell the user.
 
-Try the sampling on a video (a 3 s clip with no cut gives three frames, at 0.5 s, 1.5 s and 2.5 s):
+Try the sampling on a video. A 3 s clip with no cut gives three groups of candidate frames, one per
+second, and `VIDEO_CANDIDATE_WINDOW_SECONDS=0` leaves just their midpoints, at 0.5 s, 1.5 s and 2.5 s:
 
 ```bash
 PYTHONPATH=. python - <<'EOF'
-from hma.video.frames import sample_frames
+from hma.video.frames import sample_frame_groups
 
-for frame in sample_frames("path/to/video.mp4"):
-    print(frame.index, round(frame.seconds, 2), frame.image.shape)
+for group in sample_frame_groups("path/to/video.mp4"):
+    print([(frame.index, round(frame.seconds, 2)) for frame in group])
 EOF
 ```
 

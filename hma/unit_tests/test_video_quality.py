@@ -22,7 +22,6 @@ from hma.video.quality import (
     assess_frame,
     iter_selected_frames,
     measure_frame,
-    select_frames,
 )
 
 H, W = 360, 640
@@ -54,6 +53,12 @@ def solid(value):
 
 def frame(index, image):
     return SampledFrame(index=index, seconds=index / 10, image=image)
+
+
+def select(groups):
+    """Run iter_selected_frames to the end and return the frames with the report."""
+    report = QualityReport()
+    return list(iter_selected_frames(groups, report=report)), report
 
 
 class TestAssessFrame:
@@ -140,11 +145,11 @@ class TestQualityConfig:
         assert QualityConfig.from_env() == QualityConfig()
 
 
-class TestSelectFrames:
+class TestSelection:
     def test_keeps_the_sharpest_usable_frame_of_each_group(self):
         sharp, soft = detailed(1), blurred(detailed(2), 0.004)
         groups = [[frame(1, soft), frame(2, sharp), frame(3, soft)], [frame(11, detailed(3))]]
-        selected, report = select_frames(groups)
+        selected, report = select(groups)
         assert [s.frame.index for s in selected] == [2, 11]
         assert report.slices == 2 and report.slices_dropped == 0 and report.frames_assessed == 4
 
@@ -152,12 +157,12 @@ class TestSelectFrames:
         junk, soft = bars_with_strip(), blurred(detailed(), 0.004)
         assert assess_frame(junk).junk and not assess_frame(soft).junk
         assert assess_frame(junk).sharpness > assess_frame(soft).sharpness  # the junk frame is the sharper one
-        selected, _ = select_frames([[frame(1, junk), frame(2, soft)]])
+        selected, _ = select([[frame(1, junk), frame(2, soft)]])
         assert [s.frame.index for s in selected] == [2]
 
     def test_a_group_with_only_junk_is_dropped_and_counted(self):
         groups = [[frame(1, detailed())], [frame(10, solid(0)), frame(11, colour_bars())], [frame(20, detailed(5))]]
-        selected, report = select_frames(groups)
+        selected, report = select(groups)
         assert [s.frame.index for s in selected] == [1, 20]
         assert report.slices == 3 and report.slices_dropped == 1
         assert report.junk_frames == {FLAT: 1, BARS: 1}
@@ -165,19 +170,19 @@ class TestSelectFrames:
 
     def test_a_video_of_only_junk_yields_nothing_and_says_so(self):
         groups = [[frame(1, solid(0))], [frame(10, solid(255))], [frame(20, colour_bars())]]
-        selected, report = select_frames(groups)
+        selected, report = select(groups)
         assert selected == []
         assert report.no_usable_frames
         assert report.slices_dropped == report.slices == 3
         assert "NO USABLE FRAMES" in report.summary()
 
     def test_no_groups_is_not_reported_as_all_junk(self):
-        selected, report = select_frames([])
+        selected, report = select([])
         assert selected == [] and not report.no_usable_frames
         assert "NO USABLE FRAMES" not in report.summary()
 
     def test_the_report_summary_names_the_reasons(self):
-        _, report = select_frames([[frame(1, detailed())], [frame(10, solid(0))]])
+        _, report = select([[frame(1, detailed())], [frame(10, solid(0))]])
         text = report.summary()
         assert "2 slices" in text and "1 flat" in text and "1 slices dropped" in text
 
@@ -189,15 +194,15 @@ class TestSelectFrames:
                 seen.append(i)
                 yield [frame(i, detailed(i))]
 
-        selected, _ = select_frames(groups())
+        selected, _ = select(groups())
         assert seen == [0, 1, 2] and len(selected) == 3
 
     def test_selected_frames_carry_their_quality(self):
-        selected, _ = select_frames([[frame(1, detailed())]])
+        selected, _ = select([[frame(1, detailed())]])
         assert isinstance(selected[0].quality, FrameQuality) and not selected[0].quality.junk
 
     def test_an_empty_group_counts_as_a_dropped_slice(self):
-        selected, report = select_frames([[], [frame(10, detailed())]])
+        selected, report = select([[], [frame(10, detailed())]])
         assert len(selected) == 1 and report.slices == 2 and report.slices_dropped == 1
 
 
@@ -209,11 +214,3 @@ class TestIterSelectedFrames:
         first = next(stream)
         assert first.frame.index == 1 and report.slices == 1
         assert list(stream) == [] and report.slices == 2 and report.slices_dropped == 1
-
-    def test_matches_select_frames(self):
-        groups = [[frame(1, detailed())], [frame(10, colour_bars())], [frame(20, detailed(4))]]
-        selected, report = select_frames(groups)
-        report2 = QualityReport()
-        streamed = list(iter_selected_frames(groups, report=report2))
-        assert [s.frame.index for s in streamed] == [s.frame.index for s in selected] == [1, 20]
-        assert report2 == report

@@ -80,12 +80,6 @@ class SamplingConfig:
 class VideoInfo:
     fps: float
     frame_count: int
-    width: int
-    height: int
-
-    @property
-    def duration_seconds(self) -> float:
-        return self.frame_count / self.fps
 
 
 @dataclass(frozen=True)
@@ -96,22 +90,20 @@ class SampledFrame:
 
 
 def probe_video(path) -> VideoInfo:
-    """Read the frame rate, frame count and size; raises ValueError if the file cannot be used."""
+    """Read the frame rate and frame count; raises ValueError if the file cannot be used."""
     cap = cv2.VideoCapture(str(path))
     try:
         if not cap.isOpened():
             raise ValueError(f"Cannot open video: {path}")
         fps = cap.get(cv2.CAP_PROP_FPS)
         frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-        width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-        height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     finally:
         cap.release()
     if not fps or math.isnan(fps) or fps <= 0:
         raise ValueError(f"Cannot determine the frame rate of {path}")
     if frame_count <= 0:
         raise ValueError(f"Cannot determine the frame count of {path}")
-    return VideoInfo(fps=fps, frame_count=frame_count, width=width, height=height)
+    return VideoInfo(fps=fps, frame_count=frame_count)
 
 
 def detect_scenes(path, info: VideoInfo, config: SamplingConfig) -> List[Tuple[int, int]]:
@@ -159,20 +151,6 @@ def _slices(
             last = start + int((i + 1) * length / slices)
             midpoint = min(start + int((i + 0.5) * length / slices), end - 1)
             yield first, max(last, first + 1), midpoint
-
-
-def candidate_frame_indices(
-    scenes: Iterable[Tuple[int, int]], fps: float, max_frame_gap_seconds: float
-) -> List[int]:
-    """
-    Frame numbers to consider, in increasing order.
-
-    Each scene is cut into the fewest equal slices no longer than max_frame_gap_seconds
-    and the middle frame of every slice is taken, so a scene shorter than the gap gets
-    one frame at its midpoint. Midpoints also keep clear of the blur and fades that tend
-    to sit right at a cut.
-    """
-    return sorted({mid for _, _, mid in _slices(scenes, fps, max_frame_gap_seconds)})
 
 
 def candidate_frame_groups(
@@ -249,13 +227,3 @@ def sample_frame_groups(path, config: Optional[SamplingConfig] = None) -> Iterat
         scenes, info.fps, config.max_frame_gap_seconds, config.candidate_window_seconds
     )
     return iter_frame_groups(path, groups, info.fps)
-
-
-def sample_frames(path, config: Optional[SamplingConfig] = None) -> Iterator[SampledFrame]:
-    """Candidate frames of a video: probe, detect scenes, choose indices, decode them."""
-    config = config or SamplingConfig.from_env()
-    path = Path(path)
-    info = probe_video(path)
-    scenes = detect_scenes(path, info, config)
-    indices = candidate_frame_indices(scenes, info.fps, config.max_frame_gap_seconds)
-    return iter_frames(path, indices, info.fps)

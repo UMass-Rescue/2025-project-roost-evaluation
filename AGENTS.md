@@ -53,6 +53,12 @@ make fetch-video-dataset && make run-video-evaluation   # full video evaluation
 See `hma/image/docs/TEST_COMMANDS.md`, `hma/video/README.md`, `sentinel/README.md`,
 `hma/image/docs/EVALUATION_DESCRIPTION.md`, and `hma/GPU_SETUP.md` for full detail — don't duplicate that detail here.
 
+## CI
+
+`.github/workflows/ci.yml` runs the HMA and Sentinel unit tests (separately, they share
+module names) and the `evaluation` image build on every PR. Keep both green; PRs use
+`.github/pull_request_template.md`.
+
 ## Code conventions
 
 - stdlib only for data handling (`csv`, `pathlib.Path`, `dataclasses`) — no

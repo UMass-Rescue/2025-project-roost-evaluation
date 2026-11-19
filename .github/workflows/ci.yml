@@ -5,6 +5,9 @@ on:
   push:
     branches: [main]
 
+permissions:
+  contents: read
+
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
@@ -30,25 +33,22 @@ jobs:
           cache: pip
           cache-dependency-path: |
             requirements.txt
+            requirements-scenedetect.txt
             hma/requirements-dev.txt
+            sentinel/requirements-dev.txt
       - name: Install dependencies
         run: |
-          pip install -r requirements.txt -r hma/requirements-dev.txt
+          pip install -r requirements.txt -r hma/requirements-dev.txt -r sentinel/requirements-dev.txt
           pip install --no-deps -r requirements-scenedetect.txt
       # The two suites share module names (test_metrics.py), so they run separately.
-      - name: HMA unit tests
+      - name: Unit tests
+        shell: bash
         run: |
-          set -o pipefail
           status=0
-          PYTHONPATH=. python -m pytest hma/unit_tests -v | tee pytest.log || status=$?
-          echo "HMA: $(tail -n 1 pytest.log | tr -d '=')" >> "$GITHUB_STEP_SUMMARY"
-          exit $status
-      - name: Sentinel unit tests
-        run: |
-          set -o pipefail
-          status=0
-          PYTHONPATH=. python -m pytest sentinel/tests -v | tee pytest.log || status=$?
-          echo "Sentinel: $(tail -n 1 pytest.log | tr -d '=')" >> "$GITHUB_STEP_SUMMARY"
+          for suite in hma/unit_tests sentinel/tests; do
+            PYTHONPATH=. python -m pytest "$suite" -v | tee pytest.log || status=$?
+            echo "$suite: $(tail -n 1 pytest.log | tr -d '=')" >> "$GITHUB_STEP_SUMMARY"
+          done
           exit $status
 
   docker-build:

@@ -6,7 +6,8 @@ import json
 import time
 from pathlib import Path
 from hma.image.series_labels_utils import get_image_files, ensure_labels_file
-from hma.logging_utils import setup_logging, get_logger, get_log_file, _log_debug, _log_info, _log_warning, _log_error  # noqa: F401 (get_logger is re-exported to the suites)
+from hma.logging_utils import get_logger  # noqa: F401 (re-exported to the tests)
+from hma.logging_utils import setup_logging, get_log_file, _log_debug, _log_info, _log_warning, _log_error
 from hma.hma_client import HMAClient, match_url
 from datetime import datetime
 

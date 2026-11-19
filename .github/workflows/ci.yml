@@ -37,9 +37,19 @@ jobs:
           pip install --no-deps -r requirements-scenedetect.txt
       # The two suites share module names (test_metrics.py), so they run separately.
       - name: HMA unit tests
-        run: PYTHONPATH=. python -m pytest hma/unit_tests -v
+        run: |
+          set -o pipefail
+          status=0
+          PYTHONPATH=. python -m pytest hma/unit_tests -v | tee pytest.log || status=$?
+          echo "HMA: $(tail -n 1 pytest.log | tr -d '=')" >> "$GITHUB_STEP_SUMMARY"
+          exit $status
       - name: Sentinel unit tests
-        run: PYTHONPATH=. python -m pytest sentinel/tests -v
+        run: |
+          set -o pipefail
+          status=0
+          PYTHONPATH=. python -m pytest sentinel/tests -v | tee pytest.log || status=$?
+          echo "Sentinel: $(tail -n 1 pytest.log | tr -d '=')" >> "$GITHUB_STEP_SUMMARY"
+          exit $status
 
   docker-build:
     runs-on: ubuntu-latest

@@ -1,19 +1,14 @@
-"""Rank videos, split the series, and sweep the frame distance: the retrieval side of the video evaluation.
+"""Rank videos, split the series, and score the matches: what the video evaluation computes from the frame lookups.
 
 Everything here works on the frame matches that frame_index.lookup_frames returns, so one lookup
 at the largest frame distance serves every smaller one.
 """
 
 import random
-from bisect import bisect_left
-from typing import Iterable, Iterator, Mapping, Sequence
+from typing import Iterable, Iterator, Mapping, NamedTuple, Sequence
 
 from hma.metrics.map import compute_series_map
 from hma.video.frame_index import FrameRef, Match, closest_distances, video_scores
-
-SCORE_ONLY = "score_only"
-CLOSEST_FRAME = "closest_frame"
-RANKINGS = (SCORE_ONLY, CLOSEST_FRAME)
 
 MatchesByQuery = Mapping[str, Sequence[Sequence[Match]]]
 
@@ -37,33 +32,15 @@ def split_series(series: Iterable[str], test_fraction: float = 0.5, seed: int = 
     return set(names[test_size:]), set(names[:test_size])
 
 
-def rank_videos(
-    scores: Mapping[str, float],
-    closest: Mapping[str, float],
-    videos: Iterable[str],
-    query: str,
-    ranking: str,
-    seed: int = 0,
-) -> list[str]:
-    """Every video but the query, best first.
+def rank_videos(scores: Mapping[str, float], closest: Mapping[str, float], videos: Iterable[str], query: str) -> list[str]:
+    """Every video but the query, best first: the higher score, and among equal scores the nearer closest frame.
 
-    Both rankings put the higher score first. Candidates that still tie are put in a fixed random
-    order (the same for the same seed and query, whatever folder the videos are in), so the file
-    names never decide a ranking.
-    CLOSEST_FRAME first breaks ties by the distance of the candidate's closest frame among all the
-    lookup results (which reach to the largest distance swept, not only the distance of the score),
-    and a candidate none of whose frames were looked up ranks last among its score.
+    The closest frame is taken from all the lookup results (which reach to the largest distance
+    swept, not only the distance of the score). A video none of whose frames were looked up ranks
+    last among its score, and videos still tied after that are in name order.
     """
-    if ranking not in RANKINGS:
-        raise ValueError(f"Unknown ranking {ranking!r}; expected one of {RANKINGS}")
-    ordered = sorted(videos)
-    # Seeded by the query's place among the sorted videos, not by its path, so the order is the
-    # same wherever the files are.
-    others = [video for video in ordered if video != query]
-    random.Random(f"{seed}/{bisect_left(ordered, query)}").shuffle(others)
-    if ranking == CLOSEST_FRAME:
-        return sorted(others, key=lambda v: (-scores.get(v, 0.0), closest.get(v, float("inf"))))
-    return sorted(others, key=lambda v: -scores.get(v, 0.0))
+    others = sorted(video for video in videos if video != query)
+    return sorted(others, key=lambda video: (-scores.get(video, 0.0), closest.get(video, float("inf"))))
 
 
 def rankings_at(
@@ -71,20 +48,16 @@ def rankings_at(
     frames: Mapping[str, FrameRef],
     videos: Sequence[str],
     max_distance: float,
-    seed: int = 0,
-) -> dict[str, dict[str, list[tuple[str, float]]]]:
-    """Rank every video for every query at one frame distance, once per ranking.
+) -> dict[str, list[tuple[str, float]]]:
+    """Rank every video for every query at one frame distance: query -> [(video, 1 - score), ...] best first.
 
-    Returns ranking name -> {query -> [(video, 1 - score), ...] best first}. The 1 - score is a
-    distance in the sense the metrics use: smaller is more similar.
+    The 1 - score is a distance in the sense the metrics use: smaller is more similar.
     """
-    result: dict[str, dict[str, list[tuple[str, float]]]] = {ranking: {} for ranking in RANKINGS}
+    result = {}
     for query, frame_matches in matches_by_query.items():
         scores = video_scores(frame_matches, frames, max_distance, exclude_video=query)
         closest = closest_distances(frame_matches, frames, exclude_video=query)
-        for ranking in RANKINGS:
-            ordered = rank_videos(scores, closest, videos, query, ranking, seed)
-            result[ranking][query] = [(v, 1 - scores.get(v, 0.0)) for v in ordered]
+        result[query] = [(video, 1 - scores.get(video, 0.0)) for video in rank_videos(scores, closest, videos, query)]
     return result
 
 
@@ -115,3 +88,30 @@ def score_pairs(
         for video in videos:
             if video != query:
                 yield query, video, 1 - scores.get(video, 0.0)
+
+
+class BestF1(NamedTuple):
+    f1: float
+    precision: float
+    recall: float
+
+
+def best_f1(labeled: Iterable[tuple[float, bool]]) -> BestF1:
+    """The best F1 over every score threshold of (distance, is_same_series) pairs; a pair is a match at or below the threshold.
+
+    Zeros when there are no same-series pairs.
+    """
+    pairs = sorted(labeled)
+    positives = sum(is_same for _, is_same in pairs)
+    best, tp, fp = BestF1(0.0, 0.0, 0.0), 0, 0
+    if not positives:
+        return best
+    for i, (distance, is_same) in enumerate(pairs):
+        tp, fp = tp + is_same, fp + (not is_same)
+        if i + 1 < len(pairs) and pairs[i + 1][0] == distance:
+            continue  # a threshold takes every pair at the same distance
+        precision, recall = tp / (tp + fp), tp / positives
+        f1 = 2 * precision * recall / (precision + recall) if tp else 0.0
+        if f1 > best.f1:
+            best = BestF1(f1, precision, recall)
+    return best

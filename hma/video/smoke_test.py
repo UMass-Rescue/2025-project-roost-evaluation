@@ -16,10 +16,10 @@ from hma.video.evaluate import SIGNAL_TYPE, EvaluationConfig, run
 from hma.video.sample_videos import make_sample_videos
 
 EXPECTED_FILES = [
-    "retrieval_sweep_{s}_results.csv",
+    "frame_distance_sweep_{s}_results.csv",
     "frame_distance_choice_{s}_results.csv",
-    "map_by_series_score_only_{s}_results.csv",
-    "map_by_series_closest_frame_{s}_results.csv",
+    "retrieval_{s}_results.csv",
+    "map_by_series_retrieval_{s}_results.csv",
     "match_precision_recall_{s}_results.csv",
     "match_precision_recall_{s}_curve.png",
     "match_precision_recall_selected_{s}_results.csv",
@@ -31,7 +31,7 @@ EXPECTED_FILES = [
 ]
 
 
-def check_results(summary: dict, config: EvaluationConfig) -> list[str]:
+def check_results(summary: dict) -> list[str]:
     """Return what is wrong with the results of a run on the sample videos; empty if all is well."""
     results_dir = summary["results_dir"]
     problems = [f"missing {name}" for name in (n.format(s=SIGNAL_TYPE) for n in EXPECTED_FILES) if not (results_dir / name).exists()]
@@ -40,12 +40,10 @@ def check_results(summary: dict, config: EvaluationConfig) -> list[str]:
     if summary["unusable"]:
         problems.append(f"{summary['unusable']} sample videos had no usable frame")
 
-    for row in read_csv_rows(results_dir / f"retrieval_sweep_{SIGNAL_TYPE}_results.csv"):
-        # Ties are broken by the closest frame, which is identical for the clips that share a scene.
-        # Without that tie-break the first hit is right only while no other series is within the distance.
-        if row["series"] == "all" and (row["ranking"] == "closest_frame" or float(row["frame_distance"]) <= config.frame_distance):
-            if float(row["map@1"]) != 1.0:
-                problems.append(f"map@1 is {row['map@1']}, not 1.0, for {row['ranking']} at distance {row['frame_distance']}")
+    for row in read_csv_rows(results_dir / f"retrieval_{SIGNAL_TYPE}_results.csv"):
+        # Clips that share a scene have identical frames, so the closest frame ranks the first hit right.
+        if row["series"] == "all" and float(row["map@1"]) != 1.0:
+            problems.append(f"map@1 is {row['map@1']}, not 1.0, at distance {row['frame_distance']}")
 
     pairwise = read_csv_rows(results_dir / f"map_by_series_pairwise_{SIGNAL_TYPE}_results.csv")[-1]
     if float(pairwise["map@1"]) != 1.0:
@@ -71,7 +69,7 @@ def main() -> int:
     print(f"$ VIDEO_INPUT_DIR={sample_dir} BANK_NAME={bank_name} python hma/video/evaluate.py")
     summary = run(sample_dir, bank_name, config)
 
-    problems = check_results(summary, config)
+    problems = check_results(summary)
     if problems:
         print("✗ Video smoke test failed:")
         for problem in problems:

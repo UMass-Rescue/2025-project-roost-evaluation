@@ -59,7 +59,7 @@ def test_prints_the_commands_that_reproduce_it(capsys, tmp_path):
 
 def test_fails_with_a_nonzero_status_when_a_result_is_wrong(capsys, monkeypatch):
     real_check = smoke_test.check_results
-    monkeypatch.setattr(smoke_test, "check_results", lambda summary, config: real_check(summary, config) + ["a broken result"])
+    monkeypatch.setattr(smoke_test, "check_results", lambda summary: real_check(summary) + ["a broken result"])
     assert smoke_test.main() == 1
     assert "✗ Video smoke test failed" in capsys.readouterr().out
 
@@ -75,25 +75,25 @@ class TestCheckResults:
         return evaluate.run(Path(os.environ["OUTPUT_DIR"]) / "samples", "BANK", EvaluationConfig())
 
     def test_a_good_run_has_no_problems(self, summary):
-        assert smoke_test.check_results(summary, EvaluationConfig()) == []
+        assert smoke_test.check_results(summary) == []
 
     def test_a_missing_file_is_reported(self, summary):
         (summary["results_dir"] / "pairwise_clip_float_compare.csv").unlink()
-        assert smoke_test.check_results(summary, EvaluationConfig()) == ["missing pairwise_clip_float_compare.csv"]
+        assert smoke_test.check_results(summary) == ["missing pairwise_clip_float_compare.csv"]
 
     def test_unusable_videos_are_reported(self, summary):
-        assert "no usable frame" in smoke_test.check_results({**summary, "unusable": 2}, EvaluationConfig())[0]
+        assert "no usable frame" in smoke_test.check_results({**summary, "unusable": 2})[0]
 
     def test_a_wrong_first_hit_is_reported(self, summary):
-        path = summary["results_dir"] / "retrieval_sweep_clip_float_results.csv"
+        path = summary["results_dir"] / "retrieval_clip_float_results.csv"
         path.write_text(path.read_text().replace("1.000000", "0.500000"))
-        problems = smoke_test.check_results(summary, EvaluationConfig())
+        problems = smoke_test.check_results(summary)
         assert problems and all("map@1 is 0.500000" in p for p in problems)
 
     def test_a_wrong_pairwise_result_is_reported(self, summary):
         path = summary["results_dir"] / "map_by_series_pairwise_clip_float_results.csv"
         path.write_text(path.read_text().replace("1.000000", "0.250000"))
-        assert any("pairwise map@1" in p for p in smoke_test.check_results(summary, EvaluationConfig()))
+        assert any("pairwise map@1" in p for p in smoke_test.check_results(summary))
 
     def test_a_match_curve_without_a_precise_point_is_reported(self, summary):
         path = summary["results_dir"] / "match_precision_recall_clip_float_results.csv"
@@ -101,4 +101,4 @@ class TestCheckResults:
         for row in curve:
             row["precision"] = "0.5"
         write_csv_rows(path, curve)
-        assert any("match curve" in p for p in smoke_test.check_results(summary, EvaluationConfig()))
+        assert any("match curve" in p for p in smoke_test.check_results(summary))

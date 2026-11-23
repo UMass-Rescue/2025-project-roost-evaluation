@@ -54,10 +54,10 @@ class TestEvaluate:
         run(dataset)
         names = {p.name for p in output.iterdir()}
         assert names == {
-            "retrieval_sweep_clip_float_results.csv",
+            "frame_distance_sweep_clip_float_results.csv",
             "frame_distance_choice_clip_float_results.csv",
-            "map_by_series_score_only_clip_float_results.csv",
-            "map_by_series_closest_frame_clip_float_results.csv",
+            "retrieval_clip_float_results.csv",
+            "map_by_series_retrieval_clip_float_results.csv",
             "match_precision_recall_clip_float_results.csv",
             "match_precision_recall_clip_float_curve.png",
             "match_precision_recall_selected_clip_float_results.csv",
@@ -69,19 +69,25 @@ class TestEvaluate:
             "distance_distribution_clip_float.png",
         } | {n for n in names if n.startswith("anon")}
 
-    def test_the_sweep_has_a_row_per_distance_ranking_and_series_group(self, dataset, output):
+    def test_the_sweep_has_a_row_per_distance_and_series_group(self, dataset, output):
         run(dataset)
-        sweep = read_csv_rows(output / "retrieval_sweep_clip_float_results.csv")
-        assert len(sweep) == 2 * 2 * 3
+        sweep = read_csv_rows(output / "frame_distance_sweep_clip_float_results.csv")
+        assert len(sweep) == 2 * 2
         assert {r["frame_distance"] for r in sweep} == {"0.1", "0.2"}
-        assert {r["ranking"] for r in sweep} == {"score_only", "closest_frame"}
-        assert {r["series"] for r in sweep} == {"all", "train", "test"}
-        assert [c for c in sweep[0] if c.startswith("map@")] == [f"map@{k}" for k in range(1, 6)]
+        assert {r["series"] for r in sweep} == {"train", "test"}
+
+    def test_the_retrieval_results_are_for_the_default_and_the_selected_distance(self, dataset, output):
+        run(dataset)
+        rows = read_csv_rows(output / "retrieval_clip_float_results.csv")
+        assert [(r["choice"], r["series"]) for r in rows] == [
+            (choice, group) for choice in ("default", "selected on train") for group in ("all", "train", "test")
+        ]
+        assert [c for c in rows[0] if c.startswith("map@")] == [f"map@{k}" for k in range(1, 6)]
 
     def test_the_first_hit_is_always_right(self, dataset, output):
-        """Every query's best match is a clip of its own series, whatever the tie order."""
+        """Every query's best match is a clip of its own series."""
         run(dataset)
-        for row in read_csv_rows(output / "retrieval_sweep_clip_float_results.csv"):
+        for row in read_csv_rows(output / "retrieval_clip_float_results.csv"):
             assert float(row["map@1"]) == 1.0
 
     def test_the_split_and_the_chosen_distance_are_reported(self, dataset, output):
@@ -91,10 +97,17 @@ class TestEvaluate:
         assert choice[0]["frame_distance"] == "0.1" and float(choice[1]["frame_distance"]) == chosen.distance
         assert chosen.distance in CONFIG_SMALL.grid
         assert len(chosen.test_videos) == 6  # two of the four series
+        assert len(chosen.train) == len(chosen.test) == 2
+
+    def test_the_distance_with_the_best_train_f1_is_chosen(self, dataset, output):
+        chosen, _ = run(dataset)
+        sweep = read_csv_rows(output / "frame_distance_sweep_clip_float_results.csv")
+        best = max(float(r["f1"]) for r in sweep if r["series"] == "train")
+        assert any(float(r["f1"]) == best and float(r["frame_distance"]) == chosen.distance for r in sweep if r["series"] == "train")
 
     def test_the_per_series_tables_list_every_series_and_a_mean(self, dataset, output):
         run(dataset)
-        table = read_csv_rows(output / "map_by_series_closest_frame_clip_float_results.csv")
+        table = read_csv_rows(output / "map_by_series_retrieval_clip_float_results.csv")
         assert [r["series"] for r in table][-1] == "mean" and len(table) == 4 + 1
 
     def test_the_match_curve_reaches_full_precision(self, dataset, output):

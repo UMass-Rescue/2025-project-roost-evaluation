@@ -31,7 +31,7 @@ video_input_dir = Path("./hma/video/resources/video-series-dataset/series")
 # The frame signal is the CLIP image embedding as floats; the integer "clip" signal has no vector to compare.
 SIGNAL_TYPE = "clip_float"
 
-# The k of the mAP@k by which the frame distance is chosen on the train series.
+# The k of the mAP@k printed in the run summary.
 SELECT_K = 3
 
 
@@ -44,14 +44,14 @@ class EvaluationConfig:
     distance_step: float = 0.05
     max_k: int = 5  # the largest k of the mAP@k columns in the sweep
     test_fraction: float = 0.5  # share of the series held out to report the chosen distance
-    seed: int = 0  # seeds the series split and the order of tied candidates
+    seed: int = 0  # seeds the split of the series into train and test
     max_workers: int = 8  # parallel lookups
 
     def __post_init__(self):
         if self.frame_distance <= 0:
             raise ValueError("frame_distance must be positive")
         if self.max_k < SELECT_K:
-            raise ValueError(f"max_k must be at least {SELECT_K}, the k the frame distance is chosen by")
+            raise ValueError(f"max_k must be at least {SELECT_K}, the k of the summary")
         if self.max_workers < 1:
             raise ValueError("max_workers must be at least 1")
         retrieval.distance_grid(self.distance_max, self.distance_step)  # validates both
@@ -84,10 +84,12 @@ class EvaluationConfig:
 
 
 class Selection(NamedTuple):
-    """The frame distance chosen on the train series, and the videos of the held-out test series."""
+    """The frame distance chosen on the train series, the videos of the held-out test series, and the split."""
 
     distance: float
     test_videos: set[str]
+    train: set[str]
+    test: set[str]
 
 
 @dataclass(frozen=True)
@@ -137,68 +139,83 @@ def evaluate(
         config=config,
         results_dir=get_results_dir(),
     )
-    selection = _retrieval_suite(data)
+    train, test = retrieval.split_series(data.series_to_videos, config.test_fraction, config.seed)
+    selection = _select_distance(data, train, test)
+    _retrieval_suite(data, selection)
     _match_suite(data, selection)
     _pairwise_suite(data)
     return selection
 
 
-def _retrieval_suite(data: _Data) -> Selection:
-    """mAP over the frame distances, for both rankings, on all series and on the train and test halves."""
+def _select_distance(data: _Data, train: set[str], test: set[str]) -> Selection:
+    """Choose the frame distance by the best match F1 on the train series; report it on the test series.
+
+    The match F1 is the best F1 over the score thresholds of calling two videos a match, so it
+    is high only when the distance finds the same-series videos without finding others.
+    """
     config = data.config
-    train, test = retrieval.split_series(data.series_to_videos, config.test_fraction, config.seed)
-    subsets = {"all": set(data.series_to_videos), "train": train, "test": test}
+    groups = {"train": train, "test": test}
+    queries = {
+        group: [v for v in data.videos if v in {m for s in members for m in data.series_to_videos[s]}]
+        for group, members in groups.items()
+    }
 
-    maps = {}  # frame distance -> (ranking, series group) -> mAP@1..max_k
-    headline_rankings = {}
+    f1 = {}  # frame distance -> group -> BestF1
     for distance in dict.fromkeys([*config.grid, config.frame_distance]):
-        rankings = retrieval.rankings_at(data.matches, data.index.frames, data.videos, distance, config.seed)
-        maps[distance] = {
-            (ranking, group): retrieval.mean_map(
-                {s: data.series_to_videos[s] for s in members}, ranked, config.max_k
+        f1[distance] = {
+            group: retrieval.best_f1(
+                classify_pairs_by_series(
+                    data.series_to_videos,
+                    retrieval.score_pairs(data.matches, data.index.frames, data.videos, distance, group_queries),
+                    normalize=str,
+                )
             )
-            for ranking, ranked in rankings.items()
-            for group, members in subsets.items()
+            for group, group_queries in queries.items()
         }
-        if distance == config.frame_distance:
-            headline_rankings = rankings  # only these are kept; the others are not needed after their mAP
-
     write_csv_rows(
-        data.results_dir / f"retrieval_sweep_{SIGNAL_TYPE}_results.csv",
+        data.results_dir / f"frame_distance_sweep_{SIGNAL_TYPE}_results.csv",
         [
-            {"frame_distance": d, "ranking": ranking, "series": group, **_map_columns(values)}
+            {"frame_distance": d, "series": group, "f1": f"{r.f1:.6f}", "precision": f"{r.precision:.6f}", "recall": f"{r.recall:.6f}"}
             for d in config.grid
-            for (ranking, group), values in maps[d].items()
+            for group, r in f1[d].items()
         ],
     )
-    for ranking, ranked in headline_rankings.items():
-        compute_map_from_rankings(
-            data.series_to_videos, ranked, str(data.results_dir / f"map_by_series_{ranking}_{SIGNAL_TYPE}_results.csv")
-        )
-
-    def select_map(distance: float, group: str) -> float:
-        return maps[distance][(retrieval.SCORE_ONLY, group)][SELECT_K - 1]
-
-    selected = max(config.grid, key=lambda d: select_map(d, "train"))
-    train_key, test_key = f"train_map@{SELECT_K}", f"test_map@{SELECT_K}"
+    selected = max(config.grid, key=lambda d: f1[d]["train"].f1)
     choices = [
-        {
-            "choice": choice,
-            "frame_distance": d,
-            train_key: f"{select_map(d, 'train'):.6f}",
-            test_key: f"{select_map(d, 'test'):.6f}",
-        }
+        {"choice": choice, "frame_distance": d, "train_f1": f"{f1[d]['train'].f1:.6f}", "test_f1": f"{f1[d]['test'].f1:.6f}"}
         for choice, d in (("default", config.frame_distance), ("selected on train", selected))
     ]
     write_csv_rows(data.results_dir / f"frame_distance_choice_{SIGNAL_TYPE}_results.csv", choices)
-
-    print(f"  Retrieval: {len(train)} train and {len(test)} test series")
-    for ranking, title in ((retrieval.SCORE_ONLY, "score only"), (retrieval.CLOSEST_FRAME, "score then closest frame")):
-        by_distance = ", ".join(f"d={d}: {maps[d][(ranking, 'all')][SELECT_K - 1]:.3f}" for d in config.grid)
-        print(f"  mAP@{SELECT_K}, {title}: {by_distance}")
+    print(f"  Frame distance chosen on {len(train)} train series (reported on {len(test)} test series), by match F1:")
     for row in choices:
-        print(f"  {row['choice']}: d={row['frame_distance']}, train mAP@{SELECT_K} {row[train_key]}, test {row[test_key]}")
-    return Selection(selected, {v for s in test for v in data.series_to_videos[s]})
+        print(f"  {row['choice']}: d={row['frame_distance']}, train F1 {row['train_f1']}, test {row['test_f1']}")
+    return Selection(selected, {v for s in test for v in data.series_to_videos[s]}, train, test)
+
+
+def _retrieval_suite(data: _Data, selection: Selection) -> None:
+    """mAP of ranking the videos by score and then closest frame, at the default and the selected frame distance.
+
+    The per-series table is at the selected distance (the last ranking made).
+    """
+    config = data.config
+    subsets = {
+        "all": set(data.series_to_videos),
+        "train": selection.train,
+        "test": selection.test,
+    }
+    rows = []
+    for choice, distance in (("default", config.frame_distance), ("selected on train", selection.distance)):
+        ranked = retrieval.rankings_at(data.matches, data.index.frames, data.videos, distance)
+        for group, members in subsets.items():
+            maps = retrieval.mean_map({s: data.series_to_videos[s] for s in members}, ranked, config.max_k)
+            rows.append({"choice": choice, "frame_distance": distance, "series": group, **_map_columns(maps)})
+    write_csv_rows(data.results_dir / f"retrieval_{SIGNAL_TYPE}_results.csv", rows)
+    compute_map_from_rankings(
+        data.series_to_videos, ranked, str(data.results_dir / f"map_by_series_retrieval_{SIGNAL_TYPE}_results.csv")
+    )
+    for row in rows:
+        if row["series"] != "all":
+            print(f"  Retrieval mAP@{SELECT_K}, {row['choice']} (d={row['frame_distance']}), {row['series']} series: {row[f'map@{SELECT_K}']}")
 
 
 def _match_suite(data: _Data, selection: Selection) -> None:

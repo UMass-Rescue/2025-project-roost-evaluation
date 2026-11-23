@@ -1,8 +1,11 @@
 # Video evaluation
 
 Video is evaluated as a bag of frames: representative frames are chosen from each video,
-hashed with the existing CLIP image signal, and stored in HMA. A video then matches another in
-proportion to how many of its frames match one of the other's.
+hashed with the existing CLIP image signal, and stored in HMA. Two frames match when their cosine
+distance is at most a *frame distance* (0.10 by default, a similarity of 0.90). A video then scores
+against another by the share of its frames that match a frame of the other, and the other videos are
+ranked by that score. The frame distance is chosen on half of the series and reported on the other
+half; [EVALUATION_DESCRIPTION.md](docs/EVALUATION_DESCRIPTION.md) explains how.
 
 Where these docs refer to "the series dataset" they mean UMass Rescue Lab's
 [video-series-dataset](https://github.com/UMass-Rescue/video-series-dataset): 398 clips of
@@ -20,7 +23,7 @@ flowchart LR
     E[A video as the query] --> F[Look up each of its frames]
     D --> F
     F --> G["Score every other video<br/>(share of the query's frames it matched)"]
-    G --> H["mAP and precision/recall<br/>(same series = right answer)"]
+    G --> H["Rank by score, ties by closest frame:<br/>mAP and precision/recall<br/>(same series = right answer)"]
 ```
 
 ## Quick start

@@ -6,40 +6,40 @@ becomes its frames is in [FRAME_SELECTION.md](FRAME_SELECTION.md).
 
 ## How two videos are compared
 
-1. **Two frames match** when their cosine distance (1 minus the cosine similarity of their CLIP
-   embeddings) is at most the *frame distance*. The default is 0.10, which is a similarity of
-   0.90 and is HMA's own `clip_float` threshold.
-2. **A candidate video's score** is the share of the query's frames that matched at least one of
-   the candidate's frames. If a query has 3 frames and 2 of them found a frame of video B, B scores
-   0.67. The query's own video is never scored.
-3. **Candidates are ranked** by score, highest first. Candidates with the same score (common, since
-   a clip has only a few frames) are ordered by their *closest frame*: the smallest distance between
-   any frame of the query and any frame of the candidate. Candidates still tied after that are in
-   name order. The closest frame is taken from everything the lookup returned, which reaches to
-   `VIDEO_DISTANCE_MAX`, so it can rank a video that matched nothing within the frame distance.
+- **Frame match.** Two frames match when their cosine distance (1 minus cosine similarity) is at
+  most the *frame distance*, 0.10 by default (a similarity of 0.90, HMA's own `clip_float` threshold).
+- **Score.** The fraction of the query's frames that found a matching frame in the candidate video.
+  A frame counts once, however many frames of the candidate it matches. If 2 of a query's 3 frames
+  match video B, B scores 0.67. The query's own video is never scored.
+- **Ranking.** Candidates are ranked by score, highest first. Candidates with the same score are
+  ordered by their *closest frame*, the smallest distance between any frame of the query and any
+  frame of the candidate, and then by name. The closest frame is read from the whole lookup, which
+  reaches to `VIDEO_DISTANCE_MAX`, so it also orders videos that matched nothing within the frame distance.
 
-The ranking uses the closest frame only to break ties, not as the score, because one close pair of
-frames is a weak signal: a shared logo or similar background can make a single pair of unrelated
-videos look close, whereas a share of the frames needs several of them to agree. The closest pair
-fits the aim that any part of one video can match any part of another more directly, so this is
-a trade-off, and the Pairwise suite below reports a distance-only comparison to set beside it.
+A higher score always wins: a video that matches 5 of the query's frames ranks above one that matches
+3, even if one of the 3 is a closer match. The closest frame only separates equal scores.
+
+The score is not symmetric. A 3-second clip scores 1.0 against a longer video that contains it, but
+the longer video, as the query, scores low against the clip.
+
+The closest frame is not the score itself because one close pair is a weak signal: a shared logo or
+background can make unrelated videos look close, while a share of the frames needs several to agree.
+The closest pair does fit "any part of one video matches any part of another" more directly, so this is a
+trade-off. The Pairwise suite below is a distance-only comparison to set beside it.
 
 ### Choosing the frame distance
 
-The best frame distance is not known in advance: too small and videos of the same series find
-nothing, too large and other series match. So the evaluation *sweeps* it, trying every value from
-`VIDEO_DISTANCE_STEP` up to `VIDEO_DISTANCE_MAX` (0.05, 0.10, ... 0.30). HMA is asked only once per
-frame, at the largest distance. Each match comes back with its distance, so the result for a smaller
-distance is that result with the farther matches dropped.
+The best frame distance is not known in advance: too small and the videos of a series find nothing,
+too large and other series match. So the evaluation *sweeps* it: it tries every value from
+`VIDEO_DISTANCE_STEP` to `VIDEO_DISTANCE_MAX` (0.05, 0.10, ... 0.30). HMA is asked once per frame, at
+the largest distance, and a smaller distance uses the same result with the farther matches dropped.
 
-For each distance, the Match suite (below) gives an F1: the best balance of precision and recall over
-the score thresholds. The distance is chosen on half of the series and reported on the other half,
-so the number shows whether a distance chosen on some series holds up on series it never saw.
-
-- The series are shuffled once with a seed (`VIDEO_SPLIT_SEED`) and divided into a train half and a
-  test half. The seed is fixed, so the split is the same on every run and runs can be compared.
-- The distance with the best F1 on the train half is the *selected* distance. Its F1 and the retrieval
-  mAP are reported on the test half, beside the same numbers at the default `VIDEO_FRAME_DISTANCE`.
+For each distance the Match suite (below) gives an F1, the best balance of precision and recall. The
+series are shuffled once and split into a train half and a test half; the seed (`VIDEO_SPLIT_SEED`) is
+fixed, so the split is the same on every run. The distance with the best F1 on the train half is the
+*selected* distance. Its F1 and the retrieval mAP are reported on the test half, beside the same numbers
+at the default `VIDEO_FRAME_DISTANCE`, which shows whether a distance chosen on some series holds up
+on others.
 
 ## The suites
 

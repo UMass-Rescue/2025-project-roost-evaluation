@@ -127,21 +127,20 @@ def select_video_frames(
     report = PipelineReport()
     deduper = FrameDeduper(config.dedupe)
     kept: List[KeptFrame] = []
-    pending = []  # (SelectedFrame, jpeg) waiting for their embeddings
+    pending = []  # (index, seconds, quality, jpeg) of frames waiting for their embeddings, without the decoded images
 
     def flush():
         if not pending:
             return
-        vectors = embed([jpeg for _, jpeg in pending])
+        vectors = embed([jpeg for *_, jpeg in pending])
         if len(vectors) != len(pending):
             raise ValueError(f"embed returned {len(vectors)} vectors for {len(pending)} frames")
-        for (selected, jpeg), vector in zip(pending, vectors):
+        for (index, seconds, quality, jpeg), vector in zip(pending, vectors):
             vector = np.asarray(vector, dtype=np.float32)
             if deduper.embedding_duplicate(vector):
                 report.embedding_duplicates += 1
                 continue
-            frame = selected.frame
-            kept.append(KeptFrame(frame.index, frame.seconds, jpeg, vector, selected.quality))
+            kept.append(KeptFrame(index, seconds, jpeg, vector, quality))
         pending.clear()
 
     groups = sample_frame_groups(Path(path), config.sampling)
@@ -149,7 +148,8 @@ def select_video_frames(
         if deduper.pixel_duplicate(thumbnail(selected.frame.image, config.dedupe.thumbnail_size)):
             report.pixel_duplicates += 1
             continue
-        pending.append((selected, encode_jpeg(selected.frame.image, config.jpeg_quality)))
+        frame = selected.frame
+        pending.append((frame.index, frame.seconds, selected.quality, encode_jpeg(frame.image, config.jpeg_quality)))
         if len(pending) >= config.embed_batch_size:
             flush()
     flush()

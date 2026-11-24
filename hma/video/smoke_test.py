@@ -16,13 +16,9 @@ from hma.video.evaluate import SIGNAL_TYPE, EvaluationConfig, run
 from hma.video.sample_videos import make_sample_videos
 
 EXPECTED_FILES = [
-    "frame_distance_sweep_{s}_results.csv",
-    "frame_distance_choice_{s}_results.csv",
-    "retrieval_{s}_results.csv",
     "map_by_series_retrieval_{s}_results.csv",
     "match_precision_recall_{s}_results.csv",
     "match_precision_recall_{s}_curve.png",
-    "match_precision_recall_selected_{s}_results.csv",
     "pairwise_{s}_compare.csv",
     "map_by_series_pairwise_{s}_results.csv",
     "precision_recall_{s}_results.csv",
@@ -40,10 +36,10 @@ def check_results(summary: dict) -> list[str]:
     if summary["unusable"]:
         problems.append(f"{summary['unusable']} sample videos had no usable frame")
 
-    for row in read_csv_rows(results_dir / f"retrieval_{SIGNAL_TYPE}_results.csv"):
-        # Clips that share a scene have identical frames, so the closest frame ranks the first hit right.
-        if row["series"] == "all" and float(row["map@1"]) != 1.0:
-            problems.append(f"map@1 is {row['map@1']}, not 1.0, at distance {row['frame_distance']}")
+    # Clips that share a scene have identical frames, so the first hit is right.
+    retrieval = read_csv_rows(results_dir / f"map_by_series_retrieval_{SIGNAL_TYPE}_results.csv")[-1]
+    if float(retrieval["map@1"]) != 1.0:
+        problems.append(f"retrieval map@1 is {retrieval['map@1']}, not 1.0")
 
     pairwise = read_csv_rows(results_dir / f"map_by_series_pairwise_{SIGNAL_TYPE}_results.csv")[-1]
     if float(pairwise["map@1"]) != 1.0:

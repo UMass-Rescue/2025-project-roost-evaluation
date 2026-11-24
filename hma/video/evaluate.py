@@ -10,14 +10,14 @@ import time
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Mapping, NamedTuple, Sequence
+from typing import Mapping, Sequence
 
 from hma.hma_client import HMAClient
 from hma.logging_utils import _log_info, _log_warning, get_log_file, setup_logging
 from hma.metrics.common import classify_pairs_by_series
 from hma.metrics.distance_distribution import compute_distance_distribution_from_labeled
 from hma.metrics.map import compute_map_from_rankings
-from hma.metrics.precision_recall import compute_precision_recall_from_labeled
+from hma.metrics.precision_recall import compute_precision_recall_from_labeled, plot_pr, sweep_thresholds
 from hma.results_utils import get_results_dir, save_content_id_mapping, write_csv_rows, write_results
 from hma.video import retrieval
 from hma.video.env import env_value
@@ -31,65 +31,44 @@ video_input_dir = Path("./hma/video/resources/video-series-dataset/series")
 # The frame signal is the CLIP image embedding as floats; the integer "clip" signal has no vector to compare.
 SIGNAL_TYPE = "clip_float"
 
-# The k of the mAP@k printed in the run summary.
-SELECT_K = 3
-
 
 @dataclass(frozen=True)
 class EvaluationConfig:
-    """How the frame distance is swept and the series are split."""
+    """The frame distances and how lookups run."""
 
-    frame_distance: float = 0.10  # the headline distance: HMA's own clip_float threshold
+    frame_distance: float = 0.10  # the threshold of the ranking: HMA's own for clip_float
     distance_max: float = 0.30  # the sweep covers step, 2 * step ... distance_max
     distance_step: float = 0.05
-    max_k: int = 5  # the largest k of the mAP@k columns in the sweep
-    test_fraction: float = 0.5  # share of the series held out to report the chosen distance
-    seed: int = 0  # seeds the split of the series into train and test
     max_workers: int = 8  # parallel lookups
 
     def __post_init__(self):
         if self.frame_distance <= 0:
             raise ValueError("frame_distance must be positive")
-        if self.max_k < SELECT_K:
-            raise ValueError(f"max_k must be at least {SELECT_K}, the k of the summary")
         if self.max_workers < 1:
             raise ValueError("max_workers must be at least 1")
         retrieval.distance_grid(self.distance_max, self.distance_step)  # validates both
-        if not 0 < self.test_fraction < 1:
-            raise ValueError("test_fraction must be between 0 and 1")
 
     @classmethod
     def from_env(cls) -> "EvaluationConfig":
-        """Read VIDEO_FRAME_DISTANCE, VIDEO_DISTANCE_MAX, VIDEO_DISTANCE_STEP, MAX_K,
-        VIDEO_TEST_FRACTION, VIDEO_SPLIT_SEED and MAX_WORKERS; unset or empty values keep the defaults."""
+        """Read VIDEO_FRAME_DISTANCE, VIDEO_DISTANCE_MAX, VIDEO_DISTANCE_STEP
+        and MAX_WORKERS; unset or empty values keep the defaults."""
         defaults = cls()
         return cls(
             frame_distance=env_value("VIDEO_FRAME_DISTANCE", defaults.frame_distance),
             distance_max=env_value("VIDEO_DISTANCE_MAX", defaults.distance_max),
             distance_step=env_value("VIDEO_DISTANCE_STEP", defaults.distance_step),
-            max_k=env_value("MAX_K", defaults.max_k, int),
-            test_fraction=env_value("VIDEO_TEST_FRACTION", defaults.test_fraction),
-            seed=env_value("VIDEO_SPLIT_SEED", defaults.seed, int),
             max_workers=env_value("MAX_WORKERS", defaults.max_workers, int),
         )
 
     @property
-    def grid(self) -> list[float]:
-        return retrieval.distance_grid(self.distance_max, self.distance_step)
+    def distances(self) -> list[float]:
+        """The frame distances the Match suite reports: the sweep, and the one of the ranking."""
+        return sorted({*retrieval.distance_grid(self.distance_max, self.distance_step), self.frame_distance})
 
     @property
     def lookup_distance(self) -> float:
         """The one distance every lookup is made at; smaller distances are filtered from its results."""
-        return max(self.grid[-1], self.frame_distance)
-
-
-class Selection(NamedTuple):
-    """The frame distance chosen on the train series, the videos of the held-out test series, and the split."""
-
-    distance: float
-    test_videos: set[str]
-    train: set[str]
-    test: set[str]
+        return self.distances[-1]
 
 
 @dataclass(frozen=True)
@@ -104,17 +83,13 @@ class _Data:
     results_dir: Path
 
 
-def _map_columns(maps: Sequence[float]) -> dict[str, str]:
-    return {f"map@{k}": f"{value:.6f}" for k, value in enumerate(maps, 1)}
-
-
 def evaluate(
     client: HMAClient,
     index: VideoIndex,
     videos: Sequence[str],
     series: Mapping[str, Sequence[str]],
     config: EvaluationConfig,
-) -> Selection:
+) -> None:
     """Run the three suites on videos already indexed in the bank and write their results.
 
     videos are all the videos of the dataset, including any the index could not use: those can
@@ -139,97 +114,39 @@ def evaluate(
         config=config,
         results_dir=get_results_dir(),
     )
-    train, test = retrieval.split_series(data.series_to_videos, config.test_fraction, config.seed)
-    selection = _select_distance(data, train, test)
-    _retrieval_suite(data, selection)
-    _match_suite(data, selection)
+    _retrieval_suite(data)
+    _match_suite(data)
     _pairwise_suite(data)
-    return selection
 
 
-def _select_distance(data: _Data, train: set[str], test: set[str]) -> Selection:
-    """Choose the frame distance by the best match F1 on the train series; report it on the test series.
-
-    The match F1 is the best F1 over the score thresholds of calling two videos a match, so it
-    is high only when the distance finds the same-series videos without finding others.
-    """
-    config = data.config
-    groups = {"train": train, "test": test}
-    queries = {
-        group: [v for v in data.videos if v in {m for s in members for m in data.series_to_videos[s]}]
-        for group, members in groups.items()
-    }
-
-    f1 = {}  # frame distance -> group -> BestF1
-    for distance in dict.fromkeys([*config.grid, config.frame_distance]):
-        f1[distance] = {
-            group: retrieval.best_f1(
-                classify_pairs_by_series(
-                    data.series_to_videos,
-                    retrieval.score_pairs(data.matches, data.index.frames, data.videos, distance, group_queries),
-                    normalize=str,
-                )
-            )
-            for group, group_queries in queries.items()
-        }
-    write_csv_rows(
-        data.results_dir / f"frame_distance_sweep_{SIGNAL_TYPE}_results.csv",
-        [
-            {"frame_distance": d, "series": group, "f1": f"{r.f1:.6f}", "precision": f"{r.precision:.6f}", "recall": f"{r.recall:.6f}"}
-            for d in config.grid
-            for group, r in f1[d].items()
-        ],
-    )
-    selected = max(config.grid, key=lambda d: f1[d]["train"].f1)
-    choices = [
-        {"choice": choice, "frame_distance": d, "train_f1": f"{f1[d]['train'].f1:.6f}", "test_f1": f"{f1[d]['test'].f1:.6f}"}
-        for choice, d in (("default", config.frame_distance), ("selected on train", selected))
-    ]
-    write_csv_rows(data.results_dir / f"frame_distance_choice_{SIGNAL_TYPE}_results.csv", choices)
-    print(f"  Frame distance chosen on {len(train)} train series (reported on {len(test)} test series), by match F1:")
-    for row in choices:
-        print(f"  {row['choice']}: d={row['frame_distance']}, train F1 {row['train_f1']}, test {row['test_f1']}")
-    return Selection(selected, {v for s in test for v in data.series_to_videos[s]}, train, test)
-
-
-def _retrieval_suite(data: _Data, selection: Selection) -> None:
-    """mAP of ranking the videos by score and then closest frame, at the default and the selected frame distance.
-
-    The per-series table is at the selected distance (the last ranking made).
-    """
-    config = data.config
-    subsets = {
-        "all": set(data.series_to_videos),
-        "train": selection.train,
-        "test": selection.test,
-    }
-    rows = []
-    for choice, distance in (("default", config.frame_distance), ("selected on train", selection.distance)):
-        ranked = retrieval.rankings_at(data.matches, data.index.frames, data.videos, distance)
-        for group, members in subsets.items():
-            maps = retrieval.mean_map({s: data.series_to_videos[s] for s in members}, ranked, config.max_k)
-            rows.append({"choice": choice, "frame_distance": distance, "series": group, **_map_columns(maps)})
-    write_csv_rows(data.results_dir / f"retrieval_{SIGNAL_TYPE}_results.csv", rows)
-    compute_map_from_rankings(
+def _retrieval_suite(data: _Data) -> None:
+    """mAP of the ranked videos that each query matches at the frame distance."""
+    ranked = retrieval.rankings_at(data.matches, data.index.frames, data.config.frame_distance)
+    per_series = compute_map_from_rankings(
         data.series_to_videos, ranked, str(data.results_dir / f"map_by_series_retrieval_{SIGNAL_TYPE}_results.csv")
     )
+    means = [sum(values) / len(values) for values in zip(*per_series.values())]
+    maps = ", ".join(f"mAP@{k} {value:.3f}" for k, value in enumerate(means, 1))
+    print(f"  Retrieval at d={data.config.frame_distance}: {maps}")
+
+
+def _match_suite(data: _Data) -> None:
+    """Precision/recall of the videos a query matches, at each frame distance."""
+    pairs = retrieval.closest_pairs(data.matches, data.index.frames)
+    rows = sweep_thresholds(classify_pairs_by_series(data.series_to_videos, pairs, normalize=str), data.config.distances)
+    name = f"match_precision_recall_{SIGNAL_TYPE}"
+    plot_pr(rows, str(data.results_dir / f"{name}_curve.png"), SIGNAL_TYPE)
+    table = [
+        {
+            "frame_distance": row["threshold"],
+            **{k: f"{row[k]:.6f}" for k in ("precision", "recall", "f1", "fpr")},
+            **{k: row[k] for k in ("tp", "fp", "fn")},
+        }
+        for row in rows
+    ]
+    write_csv_rows(data.results_dir / f"{name}_results.csv", table)
     for row in rows:
-        if row["series"] != "all":
-            print(f"  Retrieval mAP@{SELECT_K}, {row['choice']} (d={row['frame_distance']}), {row['series']} series: {row[f'map@{SELECT_K}']}")
-
-
-def _match_suite(data: _Data, selection: Selection) -> None:
-    """Precision/recall of calling two videos a match, sweeping the score at a fixed frame distance."""
-    test_queries = [v for v in data.videos if v in selection.test_videos]
-    runs = (("", data.config.frame_distance, None), ("selected_", selection.distance, test_queries))
-    for label, distance, queries in runs:
-        pairs = retrieval.score_pairs(data.matches, data.index.frames, data.videos, distance, queries)
-        labeled = classify_pairs_by_series(data.series_to_videos, pairs, normalize=str)
-        csv_path = data.results_dir / f"match_precision_recall_{label}{SIGNAL_TYPE}_results.csv"
-        compute_precision_recall_from_labeled(
-            labeled, str(csv_path), str(csv_path).replace("_results.csv", "_curve.png"), SIGNAL_TYPE
-        )
-        print(f"  Match precision/recall at d={distance}" + (" (test series only)" if queries else "") + f": {csv_path.name}")
+        print(f"  Match at d={row['threshold']}: precision {row['precision']:.3f}, recall {row['recall']:.3f}, F1 {row['f1']:.3f}")
 
 
 # The largest cosine distance. A video with no frames is as far from every video as it can be.
@@ -255,10 +172,7 @@ def _pairwise_suite(data: _Data) -> None:
     videos, matrix = video_distances(data.index.embeddings)
     pairs = list(distance_pairs(videos, matrix))
     write_results(
-        [
-            {"video1": a, "video2": b, "distance": distance, "matched": distance <= data.config.frame_distance}
-            for a, b, distance in pairs
-        ],
+        [{"video1": a, "video2": b, "distance": distance} for a, b, distance in pairs],
         f"pairwise_{SIGNAL_TYPE}_compare.csv",
         item_key="video",
     )

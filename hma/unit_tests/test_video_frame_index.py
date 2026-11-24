@@ -9,7 +9,6 @@ import numpy as np
 import pytest
 
 from hma.video.frame_index import (
-    FrameRef,
     VideoIndex,
     closest_distances,
     decode_signal,
@@ -17,10 +16,10 @@ from hma.video.frame_index import (
     hma_embedder,
     index_videos,
     lookup_frames,
-    video_scores,
+    rank_matches,
     wait_until_searchable,
 )
-from video_testing import CONFIG, FakeHMA, detailed, scenes_video, write_video
+from video_testing import CONFIG, FRAMES, FakeHMA, detailed, scenes_video, write_video
 
 
 @pytest.fixture
@@ -182,62 +181,90 @@ class TestWaitUntilSearchable:
         wait_until_searchable(hma, VideoIndex())
 
 
-FRAMES = {
-    "1": FrameRef("a", 0, 0.5),
-    "2": FrameRef("a", 6, 1.5),
-    "3": FrameRef("b", 0, 0.5),
-    "4": FrameRef("c", 0, 0.5),
-}
+def names(matches, max_distance=0.1, **kwargs):
+    return [video for video, _ in rank_matches(matches, FRAMES, max_distance, **kwargs)]
 
 
-class TestVideoScores:
-    def test_the_score_is_the_share_of_query_frames_that_matched_the_video(self):
-        matches = [[("3", 0.01)], [("3", 0.02), ("4", 0.03)], [], [("4", 0.05)]]
-        assert video_scores(matches, FRAMES, 0.1) == {"b": 0.5, "c": 0.5}
+def scores(matches, max_distance=0.1):
+    return dict(rank_matches(matches, FRAMES, max_distance))
 
-    def test_several_matching_frames_of_one_video_count_a_query_frame_once(self):
-        matches = [[("1", 0.01), ("2", 0.02)]]
-        assert video_scores(matches, FRAMES, 0.1) == {"a": 1.0}
+
+def query_matching(b, c):
+    """The lookups of a query whose frames match video b at the distances b, and video c at the distances c."""
+    return [[("3", distance)] for distance in b] + [[("4", distance)] for distance in c]
+
+
+class TestRankMatches:
+    def test_each_matched_frame_adds_its_closeness_relative_to_the_distance(self):
+        assert scores(query_matching([0.02, 0.06], []) + [[]]) == {"b": pytest.approx(0.8 + 0.4)}
+
+    @pytest.mark.parametrize(
+        "better, worse",
+        [
+            ([0.05] * 8, [0.05] * 3),  # more frames at the same distance
+            ([0.02] * 5, [0.06] * 5),  # as many frames, but closer
+            ([0.04] * 5, [0.01]),  # several good frames against one very close one
+            ([0.02] * 3, [0.09] * 5),  # close frames against more that barely match
+        ],
+    )
+    def test_more_and_closer_frames_rank_first(self, better, worse):
+        assert names(query_matching(better, worse)) == ["b", "c"]
+        assert names(query_matching(worse, better)) == ["c", "b"]
+
+    def test_videos_that_tie_are_in_name_order(self):
+        assert names([[("4", 0.05), ("3", 0.05)]]) == ["b", "c"]
+
+    def test_a_query_frame_counts_once_at_its_closest_frame(self):
+        assert scores([[("1", 0.05), ("2", 0.02)]]) == {"a": pytest.approx(0.8)}
 
     def test_only_matches_within_the_distance_count(self):
-        matches = [[("3", 0.05)], [("3", 0.2)]]
-        assert video_scores(matches, FRAMES, 0.1) == {"b": 0.5}
-        assert video_scores(matches, FRAMES, 0.3) == {"b": 1.0}
-        assert video_scores(matches, FRAMES, 0.05) == {"b": 0.5}  # a distance equal to the limit counts
+        matches = query_matching([0.05, 0.2], [])
+        assert scores(matches, 0.1) == {"b": pytest.approx(0.5)}
+        assert scores(matches, 0.4) == {"b": pytest.approx(0.875 + 0.5)}
 
-    def test_the_query_video_is_never_scored(self):
-        matches = [[("1", 0.0), ("3", 0.01)]]
-        assert video_scores(matches, FRAMES, 0.1, exclude_video="a") == {"b": 1.0}
+    def test_a_frame_at_exactly_the_distance_matches_and_adds_nothing(self):
+        assert scores([[("3", 0.1)]]) == {"b": 0.0}
 
-    def test_unknown_bank_items_are_ignored(self):
-        assert video_scores([[("99", 0.0)]], FRAMES, 0.1) == {}
+    def test_the_distance_can_change_the_order(self):
+        matches = query_matching([0.01], [0.09] * 5)
+        assert names(matches, 0.1) == ["b", "c"] and names(matches, 0.2) == ["c", "b"]
 
-    def test_a_query_with_no_frames_scores_nothing(self):
-        assert video_scores([], FRAMES, 0.1) == {}
+    @pytest.mark.parametrize("max_distance", [0, -0.1])
+    def test_the_distance_must_be_positive(self, max_distance):
+        with pytest.raises(ValueError, match="positive"):
+            rank_matches([], FRAMES, max_distance)
+
+    def test_a_short_clip_is_found_in_a_long_query(self):
+        assert names([[]] * 500 + [[("3", 0.01)]]) == ["b"]
 
     def test_a_video_with_no_match_is_absent(self):
-        assert "c" not in video_scores([[("3", 0.0)]], FRAMES, 0.1)
+        assert names([[("3", 0.2)]]) == [] and names([]) == [] and names([[]]) == []
 
+    def test_the_query_video_is_never_returned(self):
+        assert names([[("1", 0.0), ("3", 0.01)]], exclude_video="a") == ["b"]
+
+    def test_unknown_bank_items_are_ignored(self):
+        assert names([[("99", 0.0)]]) == []
 
 
 class TestClosestDistances:
     def test_each_video_gets_the_distance_of_its_closest_frame(self):
-        matches = [[("1", 0.08), ("3", 0.30)], [("2", 0.02), ("3", 0.10)]]
+        matches = [("1", 0.08), ("3", 0.30), ("2", 0.02), ("3", 0.10)]
         assert closest_distances(matches, FRAMES) == {"a": 0.02, "b": 0.10}
 
     def test_the_query_video_is_left_out(self):
-        assert closest_distances([[("1", 0.0), ("3", 0.2)]], FRAMES, exclude_video="a") == {"b": 0.2}
+        assert closest_distances([("1", 0.0), ("3", 0.2)], FRAMES, exclude_video="a") == {"b": 0.2}
 
     def test_unknown_bank_items_and_empty_results_are_ignored(self):
-        assert closest_distances([[("99", 0.0)], []], FRAMES) == {}
+        assert closest_distances([("99", 0.0)], FRAMES) == {} and closest_distances([], FRAMES) == {}
 
 
 def test_a_query_finds_the_video_that_shares_its_scene(tmp_path, hma):
-    """End to end: the clip that continues a scene scores above the clip of another scene."""
+    """End to end: the clip that continues a scene is found and the clip of other scenes is not."""
     first = scenes_video(tmp_path / "first.avi", [(1, 10), (2, 10)])
     same_scene = scenes_video(tmp_path / "same.avi", [(2, 10), (9, 10)])
     other = scenes_video(tmp_path / "other.avi", [(7, 10), (8, 10)])
     index = index_videos(hma, "BANK", [first, same_scene, other], config=CONFIG)
     matches = lookup_frames(hma, index.embeddings[first], 0.05)
-    scores = video_scores(matches, index.frames, 0.05, exclude_video=first)
-    assert scores == {same_scene: 0.5}
+    ranked = rank_matches(matches, index.frames, 0.05, exclude_video=first)
+    assert ranked == [(same_scene, pytest.approx(1, abs=0.01))]

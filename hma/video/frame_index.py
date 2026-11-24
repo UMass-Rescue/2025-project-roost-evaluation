@@ -1,12 +1,12 @@
-"""Index the frames of videos in an HMA bank and score a query video against them.
+"""Index the frames of videos in an HMA bank and rank the videos that match a query video.
 
 A video is a bag of frames. Each frame kept by the pipeline is one bank item, hashed with the
-CLIP image signal, and a query video matches a candidate video in proportion to the share of
-the query's own frames that found one of the candidate's frames.
+CLIP image signal. The videos a query matches are ranked by a score that adds up how close each
+of the query's frames came to one of their frames.
 """
 
 import time
-from collections import Counter
+from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -70,7 +70,7 @@ def index_videos(
     The bank does not remember which video an item came from, so the returned index does.
     A video that cannot be read, or has no usable frame, is listed as unusable and left out.
     Raises if a frame cannot be added, because a frame missing from the bank would silently
-    change every score.
+    change the matches of every query.
     """
     config = config or PipelineConfig.from_env()
     embed = hma_embedder(client, signal_type)
@@ -144,41 +144,42 @@ def lookup_frames(
         return list(pool.map(lookup, embeddings))
 
 
-def video_scores(
+def rank_matches(
     frame_matches: Sequence[Sequence[Match]],
     frames: Mapping[str, FrameRef],
     max_distance: float,
     exclude_video: str | None = None,
-) -> dict[str, float]:
-    """Score each candidate video by the share of the query's frames that matched at least one
-    of its frames within max_distance. A video with no match is absent, and the query's own
-    video (exclude_video) is never scored."""
-    if not frame_matches:
-        return {}
-    matched = Counter()
+) -> list[tuple[str, float]]:
+    """The videos that matched a query and their scores, best first. Take the first k for the top k.
+
+    A query frame matches a video when one of the video's frames is within max_distance of it. It
+    counts once, at the distance of the closest such frame, and adds 1 - (distance / max_distance)
+    to the video's score: 1 for an identical frame, 0 for one at max_distance. The highest score
+    ranks first, then the name. A video with no matched frame is absent, and so is the query's own
+    video (exclude_video).
+    """
+    if max_distance <= 0:
+        raise ValueError("max_distance must be positive")
+    scores: dict[str, float] = defaultdict(float)
     for matches in frame_matches:
-        videos = {frames[content_id].video for content_id, distance in matches if distance <= max_distance and content_id in frames}
-        videos.discard(exclude_video)
-        matched.update(videos)
-    return {video: count / len(frame_matches) for video, count in matched.items()}
+        for video, distance in closest_distances(matches, frames, exclude_video).items():
+            if distance <= max_distance:
+                scores[video] += 1 - distance / max_distance
+    return sorted(scores.items(), key=lambda item: (-item[1], item[0]))
 
 
 def closest_distances(
-    frame_matches: Sequence[Sequence[Match]],
+    matches: Iterable[Match],
     frames: Mapping[str, FrameRef],
     exclude_video: str | None = None,
 ) -> dict[str, float]:
-    """For each video that has any frame in the lookup results, the distance of its frame
-    closest to a query frame. The query's own video (exclude_video) is left out.
-
-    This looks at every match the lookup returned, so it reaches as far as the lookup distance,
-    which is the largest distance swept, not only the distance a score is computed at."""
+    """For each video that has a frame among the matches, the distance of its closest frame.
+    The query's own video (exclude_video) is left out."""
     closest: dict[str, float] = {}
-    for matches in frame_matches:
-        for content_id, distance in matches:
-            frame = frames.get(content_id)
-            if frame is None or frame.video == exclude_video:
-                continue
-            if distance < closest.get(frame.video, float("inf")):
-                closest[frame.video] = distance
+    for content_id, distance in matches:
+        frame = frames.get(content_id)
+        if frame is None or frame.video == exclude_video:
+            continue
+        if distance < closest.get(frame.video, float("inf")):
+            closest[frame.video] = distance
     return closest

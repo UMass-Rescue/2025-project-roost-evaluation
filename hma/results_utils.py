@@ -138,7 +138,10 @@ def write_results(results, filename, item_key="image"):
     is_pairwise = filename.startswith("pairwise_")
     if is_pairwise:
         key1, key2 = f"{item_key}1", f"{item_key}2"
-        fieldnames = [key1, key2, "distance", "matched"]
+        # the video evaluation compares whole videos, which no threshold decides
+        fieldnames = [key1, key2, "distance"]
+        if not results or "matched" in results[0]:
+            fieldnames.append("matched")
         rows = []
         for r in results_to_write:
             distance = r.get("distance")
@@ -148,12 +151,13 @@ def write_results(results, filename, item_key="image"):
             # Only include rows with valid distances
             if distance is not None and distance != "":
                 distance_str = str(distance)
-                rows.append({
+                row = {
                     key1: r.get(key1, ""), 
                     key2: r.get(key2, ""), 
                     "distance": distance_str, 
                     "matched": r.get("matched", False)
-                })
+                }
+                rows.append({name: row[name] for name in fieldnames})
     else:
         param_name = "threshold" if "threshold" in filename else "k"
         fieldnames = [item_key, param_name, "bank_content_id", "distance"]

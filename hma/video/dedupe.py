@@ -1,8 +1,8 @@
 """Remove redundant frames of one video, and thin what is left evenly if a cap is set.
 
 A long static shot gives many near-identical frames; keeping all of them only inflates the
-index and makes that shot count for more than it should when a video is scored by the
-share of its frames that matched. Frames are compared in two steps, cheapest first:
+index and makes that shot count for more than it should when the matched frames are added
+up into a score. Frames are compared in two steps, cheapest first:
 
 1. tiny grayscale thumbnails, before any embedding is computed, so an obviously repeated
    frame never costs an embedding;

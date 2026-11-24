@@ -2,10 +2,9 @@
 
 Video is evaluated as a bag of frames: representative frames are chosen from each video,
 hashed with the existing CLIP image signal, and stored in HMA. Two frames match when their cosine
-distance is at most a *frame distance* (0.10 by default). A video's score against another is the
-fraction of its frames that found a match in the other, and the other videos are ranked by that score.
-[docs/EVALUATION_DESCRIPTION.md](docs/EVALUATION_DESCRIPTION.md) has the details, including how the
-frame distance is chosen.
+distance is at most a *frame distance* (0.10 by default). The videos a query matches are ranked by a
+score that adds up how close each of the query's frames came to them, so more and closer frames rank higher.
+[docs/EVALUATION_DESCRIPTION.md](docs/EVALUATION_DESCRIPTION.md) has the details and an example.
 
 Where these docs refer to "the series dataset" they mean UMass Rescue Lab's
 [video-series-dataset](https://github.com/UMass-Rescue/video-series-dataset): 398 clips of
@@ -22,8 +21,8 @@ flowchart LR
     C --> D[("HMA bank<br/>one item per frame")]
     E[A video as the query] --> F[Look up each of its frames]
     D --> F
-    F --> G["Score every other video<br/>(share of the query's frames it matched)"]
-    G --> H["Rank by score, ties by closest frame:<br/>mAP and precision/recall<br/>(same series = right answer)"]
+    F --> G["Group the matched frames by video"]
+    G --> H["Rank by the summed closeness of the frames:<br/>mAP and precision/recall<br/>(same series = right answer)"]
 ```
 
 ## Quick start
@@ -63,7 +62,7 @@ commands that reproduce it, and exits non-zero if a check fails. Expect
 ## Read more
 
 - [docs/EVALUATION_DESCRIPTION.md](docs/EVALUATION_DESCRIPTION.md): what the three suites measure, the result
-  files, the settings, and how frames are stored in HMA and scored.
+  files, the settings, and how frames are stored in HMA and matched.
 - [docs/FRAME_SELECTION.md](docs/FRAME_SELECTION.md): how a video becomes the frames that are hashed, and the
   settings of each step.
 

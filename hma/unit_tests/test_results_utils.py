@@ -100,6 +100,12 @@ def test_write_results_item_key_names_the_pairwise_columns():
     assert rows[0]["video1"] != rows[0]["video2"]  # distinct anonymised ids, not the raw paths
 
 
+def test_write_results_leaves_out_matched_when_the_results_have_none():
+    results = [{"video1": "v1.mp4", "video2": "v2.mp4", "distance": 0.1}]
+    rows = _rows(results_utils.write_results(results, "pairwise_clip_float_compare.csv", item_key="video"))
+    assert list(rows[0]) == ["video1", "video2", "distance"]
+
+
 def test_item_key_only_anonymises_its_own_columns(monkeypatch):
     # with item_key="video" an "image" entry is not a path to anonymise, so it is left alone
     results = [{"video": "v.mp4", "image": "keep-as-is.jpg", "k": 1, "matches": []}]

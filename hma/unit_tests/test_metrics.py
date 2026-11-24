@@ -22,6 +22,7 @@ from hma.metrics.map import (
 from hma.metrics.precision_recall import (
     compute_precision_recall_from_labeled,
     compute_precision_recall_from_pairwise,
+    sweep_thresholds,
 )
 
 SERIES = {"A": {"a1", "a2", "a3"}, "B": {"b1", "b2"}}
@@ -107,6 +108,10 @@ class TestMapFromRankings:
         row = _rows(out)[0]
         assert float(row["map@1"]) == pytest.approx(0.5)  # b1 misses at rank 1, b2 hits
 
+    def test_an_item_that_is_not_returned_counts_as_missed(self, tmp_path):
+        rankings = {"b1": [("b2", 0.05)], "b2": []}
+        assert compute_map_from_rankings({"B": {"b1", "b2"}}, rankings, str(tmp_path / "map.csv"))["B"][0] == 0.5
+
     def test_the_querys_own_entry_is_ignored(self, tmp_path):
         rankings = {"b1": [("b1", 0.0), ("b2", 0.2)], "b2": [("b2", 0.0), ("b1", 0.2)]}
         out = tmp_path / "map.csv"
@@ -145,6 +150,14 @@ class TestPrecisionRecallFromLabeled:
         via_labeled = tmp_path / "via_labeled.csv"
         compute_precision_recall_from_labeled(labeled, str(via_labeled))
         assert via_pairwise.read_text() == via_labeled.read_text()
+
+    def test_f1_counts_both_wrong_and_missed_pairs(self):
+        (row,) = sweep_thresholds([(0.1, True), (0.1, False), (0.1, False), (0.5, True)], [0.2])  # tp 1, fp 2, fn 1
+        assert row["f1"] == pytest.approx(2 / 5)
+
+    def test_f1_is_zero_when_nothing_is_found(self):
+        (row,) = sweep_thresholds([(0.5, True)], [0.2])
+        assert row["f1"] == 0.0
 
     def test_no_pairs_writes_only_a_header(self, tmp_path):
         out = tmp_path / "pr.csv"

@@ -3,11 +3,20 @@
 import cv2
 import numpy as np
 
-from hma.video.frame_index import decode_signal, encode_signal
+from hma.video.frame_index import FrameRef, decode_signal, encode_signal
 from hma.video.frames import SamplingConfig
 from hma.video.pipeline import PipelineConfig
 
 H, W = 360, 640
+
+# bank items for tests of the matching: 1-2 are frames of video "a", 3 of "b", 4 of "c", 5 of "d"
+FRAMES = {
+    "1": FrameRef("a", 0, 0.5),
+    "2": FrameRef("a", 6, 1.5),
+    "3": FrameRef("b", 0, 0.5),
+    "4": FrameRef("c", 0, 0.5),
+    "5": FrameRef("d", 0, 0.5),
+}
 
 # one frame per second, no scene detection, no neighbouring candidates: easy to count
 CONFIG = PipelineConfig(sampling=SamplingConfig(scene_detector="none", max_frame_gap_seconds=1.0, candidate_window_seconds=0))

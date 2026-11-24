@@ -5,12 +5,14 @@ and clip c scenes (3, 4), so neighbouring clips share a scene and clips a and c 
 Scenes of different series never repeat, so the only matches are inside a series.
 """
 
+from dataclasses import replace
+
 import numpy as np
 import pytest
 
 from hma.results_utils import read_csv_rows
 from hma.video.evaluate import EvaluationConfig, evaluate as run_evaluation
-from hma.video.frame_index import index_videos
+from hma.video.frame_index import FrameRef, VideoIndex, encode_signal, index_videos
 from hma.video.series_labels_utils import find_video_series, get_video_files
 from video_testing import CONFIG, FakeHMA, scenes_video, write_video
 
@@ -46,7 +48,12 @@ def run(dataset, config=CONFIG_SMALL):
     series = find_video_series(dataset)
     client = FakeHMA()
     index = index_videos(client, "BANK", videos, config=CONFIG)
-    return run_evaluation(client, index, videos, series, config), index
+    run_evaluation(client, index, videos, series, config)
+    return index
+
+
+def retrieval_mean(output):
+    return read_csv_rows(output / "map_by_series_retrieval_clip_float_results.csv")[-1]
 
 
 class TestEvaluate:
@@ -54,14 +61,9 @@ class TestEvaluate:
         run(dataset)
         names = {p.name for p in output.iterdir()}
         assert names == {
-            "frame_distance_sweep_clip_float_results.csv",
-            "frame_distance_choice_clip_float_results.csv",
-            "retrieval_clip_float_results.csv",
             "map_by_series_retrieval_clip_float_results.csv",
             "match_precision_recall_clip_float_results.csv",
             "match_precision_recall_clip_float_curve.png",
-            "match_precision_recall_selected_clip_float_results.csv",
-            "match_precision_recall_selected_clip_float_curve.png",
             "pairwise_clip_float_compare.csv",
             "map_by_series_pairwise_clip_float_results.csv",
             "precision_recall_clip_float_results.csv",
@@ -69,59 +71,51 @@ class TestEvaluate:
             "distance_distribution_clip_float.png",
         } | {n for n in names if n.startswith("anon")}
 
-    def test_the_sweep_has_a_row_per_distance_and_series_group(self, dataset, output):
+    def test_prints_the_mean_map_at_every_k(self, dataset, capsys):
         run(dataset)
-        sweep = read_csv_rows(output / "frame_distance_sweep_clip_float_results.csv")
-        assert len(sweep) == 2 * 2
-        assert {r["frame_distance"] for r in sweep} == {"0.1", "0.2"}
-        assert {r["series"] for r in sweep} == {"train", "test"}
+        assert "Retrieval at d=0.1: mAP@1 1.000, mAP@2 0.667, mAP@3 0.667\n" in capsys.readouterr().out
 
-    def test_the_retrieval_results_are_for_the_default_and_the_selected_distance(self, dataset, output):
-        run(dataset)
-        rows = read_csv_rows(output / "retrieval_clip_float_results.csv")
-        assert [(r["choice"], r["series"]) for r in rows] == [
-            (choice, group) for choice in ("default", "selected on train") for group in ("all", "train", "test")
-        ]
-        assert [c for c in rows[0] if c.startswith("map@")] == [f"map@{k}" for k in range(1, 6)]
+    def test_the_retrieval_ranking_uses_the_frame_distance_and_not_the_lookup_distance(self, output):
+        """Clips of a series are 0.2 apart: not matched at 0.1, although the lookup reaches 0.3."""
+        vectors = {"a1": [1, 0, 0, 0], "a2": [0.8, 0.6, 0, 0], "b1": [0, 0, 1, 0], "b2": [0, 0, 0.8, 0.6]}
+        client, index = FakeHMA(), VideoIndex()
+        for video, vector in vectors.items():
+            index.embeddings[video] = np.array([vector], dtype=np.float32)
+            content_id = client.add_signal_to_bank("BANK", "clip_float", encode_signal(index.embeddings[video][0]))
+            index.frames[content_id] = FrameRef(video, 0, 0.0)
+        series = {"a": ["a1", "a2"], "b": ["b1", "b2"]}
+        for frame_distance, expected in ((0.1, 0.0), (0.3, 1.0)):
+            config = EvaluationConfig(frame_distance=frame_distance, distance_max=0.3, distance_step=0.1)
+            run_evaluation(client, index, list(vectors), series, config)
+            assert float(retrieval_mean(output)["map@1"]) == expected
 
     def test_the_first_hit_is_always_right(self, dataset, output):
         """Every query's best match is a clip of its own series."""
         run(dataset)
-        for row in read_csv_rows(output / "retrieval_clip_float_results.csv"):
-            assert float(row["map@1"]) == 1.0
+        assert float(retrieval_mean(output)["map@1"]) == 1.0
 
-    def test_the_split_and_the_chosen_distance_are_reported(self, dataset, output):
-        chosen, _ = run(dataset)
-        choice = read_csv_rows(output / "frame_distance_choice_clip_float_results.csv")
-        assert [r["choice"] for r in choice] == ["default", "selected on train"]
-        assert choice[0]["frame_distance"] == "0.1" and float(choice[1]["frame_distance"]) == chosen.distance
-        assert chosen.distance in CONFIG_SMALL.grid
-        assert len(chosen.test_videos) == 6  # two of the four series
-        assert len(chosen.train) == len(chosen.test) == 2
-
-    def test_the_distance_with_the_best_train_f1_is_chosen(self, dataset, output):
-        chosen, _ = run(dataset)
-        sweep = read_csv_rows(output / "frame_distance_sweep_clip_float_results.csv")
-        best = max(float(r["f1"]) for r in sweep if r["series"] == "train")
-        assert any(float(r["f1"]) == best and float(r["frame_distance"]) == chosen.distance for r in sweep if r["series"] == "train")
+    def test_a_clip_that_shares_no_scene_with_its_series_counts_as_missed(self, dataset, output):
+        """Clips a and c share nothing, so each finds one of its two relevant videos; b finds both."""
+        run(dataset, replace(CONFIG_SMALL, frame_distance=0.001))
+        assert float(retrieval_mean(output)["map@3"]) == pytest.approx((0.5 + 1 + 0.5) / 3, abs=1e-5)
 
     def test_the_per_series_tables_list_every_series_and_a_mean(self, dataset, output):
         run(dataset)
         table = read_csv_rows(output / "map_by_series_retrieval_clip_float_results.csv")
         assert [r["series"] for r in table][-1] == "mean" and len(table) == 4 + 1
 
-    def test_the_match_curve_reaches_full_precision(self, dataset, output):
-        run(dataset)
-        curve = read_csv_rows(output / "match_precision_recall_clip_float_results.csv")
-        assert max(float(r["precision"]) for r in curve) == 1.0
-        assert max(float(r["recall"]) for r in curve) == 1.0
+    def test_the_match_results_have_a_row_per_frame_distance(self, dataset, output):
+        run(dataset, replace(CONFIG_SMALL, frame_distance=0.05))
+        rows = read_csv_rows(output / "match_precision_recall_clip_float_results.csv")
+        assert [r["frame_distance"] for r in rows] == ["0.05", "0.1", "0.2"]  # the frame distance is added to the sweep
 
-    def test_the_selected_curve_covers_the_test_queries_only(self, dataset, output):
-        run(dataset)
-        everything = read_csv_rows(output / "match_precision_recall_clip_float_results.csv")
-        selected = read_csv_rows(output / "match_precision_recall_selected_clip_float_results.csv")
-        positives = lambda curve: max(int(r["tp"]) + int(r["fn"]) for r in curve)
-        assert positives(selected) < positives(everything)
+    def test_the_match_metrics_count_the_returned_videos(self, dataset, output):
+        """At a tiny distance only clips that share a scene match: 4 of the 6 ordered pairs of each series."""
+        run(dataset, replace(CONFIG_SMALL, frame_distance=0.001))
+        row = read_csv_rows(output / "match_precision_recall_clip_float_results.csv")[0]
+        assert (int(row["tp"]), int(row["fp"]), int(row["fn"])) == (16, 0, 8)
+        assert (float(row["precision"]), float(row["recall"])) == (1.0, pytest.approx(2 / 3, abs=1e-5))
+        assert float(row["f1"]) == pytest.approx(0.8)
 
     def test_the_pairwise_results_are_anonymised_by_default(self, dataset, output):
         run(dataset)
@@ -152,7 +146,7 @@ class TestEvaluate:
     def test_a_video_with_no_usable_frame_still_counts_in_the_match_and_pairwise_metrics(self, tmp_path, output):
         flat = lambda root: write_video(root / "series_0" / "clip_d.avi", [np.full((360, 640, 3), 128, np.uint8)] * 20)
         dataset = make_series(tmp_path / "with_flat", extra=flat)
-        _, index = run(dataset)
+        index = run(dataset)
         assert [v.split("/")[-1] for v in index.unusable] == ["clip_d.avi"]
         curve = read_csv_rows(output / "match_precision_recall_clip_float_results.csv")
         # three series of three clips and one of four: 3 * 6 + 12 ordered same-series pairs, the flat clip's included
@@ -167,16 +161,15 @@ class TestEvaluationConfig:
     def test_defaults(self):
         config = EvaluationConfig()
         assert config.frame_distance == 0.10
-        assert config.grid == [0.05, 0.1, 0.15, 0.2, 0.25, 0.3]
+        assert config.distances == [0.05, 0.1, 0.15, 0.2, 0.25, 0.3]
         assert config.lookup_distance == 0.30
-        assert (config.max_k, config.test_fraction, config.seed) == (5, 0.5, 0)
 
-    def test_the_lookup_distance_covers_a_headline_beyond_the_grid(self):
+    def test_the_lookup_distance_covers_a_frame_distance_beyond_the_sweep(self):
         assert EvaluationConfig(frame_distance=0.4).lookup_distance == 0.4
 
     @pytest.mark.parametrize(
         "kwargs",
-        [{"frame_distance": 0}, {"max_k": 2}, {"max_workers": 0}, {"distance_step": 0}, {"test_fraction": 1.0}],
+        [{"frame_distance": 0}, {"max_workers": 0}, {"distance_step": 0}],
     )
     def test_rejects_invalid_values(self, kwargs):
         with pytest.raises(ValueError):
@@ -187,15 +180,12 @@ class TestEvaluationConfig:
             "VIDEO_FRAME_DISTANCE": "0.12",
             "VIDEO_DISTANCE_MAX": "0.4",
             "VIDEO_DISTANCE_STEP": "0.1",
-            "MAX_K": "6",
-            "VIDEO_TEST_FRACTION": "0.25",
-            "VIDEO_SPLIT_SEED": "7",
             "MAX_WORKERS": "2",
         }.items():
             monkeypatch.setenv(name, value)
-        assert EvaluationConfig.from_env() == EvaluationConfig(0.12, 0.4, 0.1, 6, 0.25, 7, 2)
+        assert EvaluationConfig.from_env() == EvaluationConfig(0.12, 0.4, 0.1, 2)
 
     def test_from_env_keeps_defaults_when_unset_or_empty(self, monkeypatch):
         monkeypatch.setenv("VIDEO_FRAME_DISTANCE", "")
-        monkeypatch.delenv("MAX_K", raising=False)
+        monkeypatch.delenv("MAX_WORKERS", raising=False)
         assert EvaluationConfig.from_env() == EvaluationConfig()

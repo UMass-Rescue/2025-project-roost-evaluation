@@ -69,8 +69,8 @@ print(report.summary())  # filled in as the frames are consumed
 ## Removing repeats
 
 A long static shot gives many near-identical frames. Keeping them all inflates the index and
-makes that shot count for more than it should when a video is scored by the share of its
-frames that matched. Frames are compared in two steps, cheapest first, and the first frame of
+makes that shot count for more than it should when the matched frames are added up into a
+score. Frames are compared in two steps, cheapest first, and the first frame of
 a group of near-duplicates wins:
 
 1. **Thumbnails**, before any embedding is computed: a frame whose 16x16 grayscale thumbnail

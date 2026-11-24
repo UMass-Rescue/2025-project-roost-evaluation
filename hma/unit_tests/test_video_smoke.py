@@ -85,10 +85,10 @@ class TestCheckResults:
         assert "no usable frame" in smoke_test.check_results({**summary, "unusable": 2})[0]
 
     def test_a_wrong_first_hit_is_reported(self, summary):
-        path = summary["results_dir"] / "retrieval_clip_float_results.csv"
+        path = summary["results_dir"] / "map_by_series_retrieval_clip_float_results.csv"
         path.write_text(path.read_text().replace("1.000000", "0.500000"))
         problems = smoke_test.check_results(summary)
-        assert problems and all("map@1 is 0.500000" in p for p in problems)
+        assert problems == ["retrieval map@1 is 0.500000, not 1.0"]
 
     def test_a_wrong_pairwise_result_is_reported(self, summary):
         path = summary["results_dir"] / "map_by_series_pairwise_clip_float_results.csv"

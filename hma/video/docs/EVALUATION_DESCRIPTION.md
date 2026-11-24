@@ -4,42 +4,49 @@ Every video is a query against the others in the bank (leave one out), and video
 series are the right answers. Frames are stored with HMA's `clip_float` signal only. How a video
 becomes its frames is in [FRAME_SELECTION.md](FRAME_SELECTION.md).
 
-## How two videos are compared
+## How videos are matched
 
-- **Frame match.** Two frames match when their cosine distance (1 minus cosine similarity) is at
-  most the *frame distance*, 0.10 by default (a similarity of 0.90, HMA's own `clip_float` threshold).
-- **Score.** The fraction of the query's frames that found a matching frame in the candidate video.
-  A frame counts once, however many frames of the candidate it matches. If 2 of a query's 3 frames
-  match video B, B scores 0.67. The query's own video is never scored.
-- **Ranking.** Candidates are ranked by score, highest first. Candidates with the same score are
-  ordered by their *closest frame*, the smallest distance between any frame of the query and any
-  frame of the candidate, and then by name. The closest frame is read from the whole lookup, which
-  reaches to `VIDEO_DISTANCE_MAX`, so it also orders videos that matched nothing within the frame distance.
+A query asks: *which videos in the bank match this one, best first?*
 
-A higher score always wins: a video that matches 5 of the query's frames ranks above one that matches
-3, even if one of the 3 is a closer match. The closest frame only separates equal scores.
+1. **Look up.** Every frame of the query is looked up in HMA. Two frames match when their cosine
+   distance (1 minus cosine similarity) is at most the *frame distance*, 0.10 by default (a
+   similarity of 0.90, HMA's own `clip_float` threshold).
+2. **Group.** The matched frames are grouped by the video they came from. A query frame counts once
+   per video, at the distance of the closest frame it matched there.
+3. **Rank.** Each matched frame adds `1 - (distance / frame distance)` to the video's score: 1 for an
+   identical frame, 0 for one right at the frame distance. The highest score comes first, and equal scores are
+   ordered by name.
+4. **Return.** The first k videos are the answer. A video with no matched frame is never returned, so
+   the list can be shorter than k. It is empty when nothing in the bank matches, or when the query has no
+   usable frame.
 
-The score is not symmetric. A 3-second clip scores 1.0 against a longer video that contains it, but
-the longer video, as the query, scores low against the clip.
+For example, with a frame distance of 0.10:
 
-The closest frame is not the score itself because one close pair is a weak signal: a shared logo or
-background can make unrelated videos look close, while a share of the frames needs several to agree.
-The closest pair does fit "any part of one video matches any part of another" more directly, so this is a
-trade-off. The Pairwise suite below is a distance-only comparison to set beside it.
+| Video | Distances of the matched frames | Score | Rank |
+|---|---|---|---|
+| A | 0.04, 0.04, 0.04, 0.04, 0.04 | 5 x 0.6 = 3.0 | 1 |
+| B | 0.02, 0.02, 0.02 | 3 x 0.8 = 2.4 | 2 |
+| C | 0.01 | 1 x 0.9 = 0.9 | 3 |
+| D | 0.09, 0.09, 0.09, 0.09, 0.09 | 5 x 0.1 = 0.5 | 4 |
+| E | 0.10 | 1 x 0.0 = 0.0 | 5 |
+| F | none within 0.10 | | not returned |
 
-### Choosing the frame distance
+Both the number of matched frames and how close they are count. One very close frame does not outrank several
+good ones (C is below A), and several barely matching frames do not outrank fewer close ones (D is below B and
+C). Frames that match nothing add nothing, so a short clip is found inside a long video. The frame distance is
+part of the score, so changing it can also change the order. The score is not divided by the number of frames,
+so compare scores within one query only.
 
-The best frame distance is not known in advance: too small and the videos of a series find nothing,
-too large and other series match. So the evaluation *sweeps* it: it tries every value from
-`VIDEO_DISTANCE_STEP` to `VIDEO_DISTANCE_MAX` (0.05, 0.10, ... 0.30). HMA is asked once per frame, at
-the largest distance, and a smaller distance uses the same result with the farther matches dropped.
+The frame distance and k are the two settings a deployment would tune. This evaluation does not choose
+them: the clips of a series are consecutive pieces of one source video, which is not what a deployment would
+see. It ranks at one frame distance, reports every k up to the size of the largest series, and shows how the
+matches change with the frame distance. HMA's default index is approximate, so a lookup can occasionally miss
+a match (see [hma/README.md](../../README.md)).
 
-For each distance the Match suite (below) gives an F1, the best balance of precision and recall. The
-series are shuffled once and split into a train half and a test half; the seed (`VIDEO_SPLIT_SEED`) is
-fixed, so the split is the same on every run. The distance with the best F1 on the train half is the
-*selected* distance. Its F1 and the retrieval mAP are reported on the test half, beside the same numbers
-at the default `VIDEO_FRAME_DISTANCE`, which shows whether a distance chosen on some series holds up
-on others.
+One accidental frame within the frame distance is enough for a video to be returned. It adds little to the
+score when it is near the frame distance, and a smaller frame distance makes it rarer. A longer video has more
+frames that could match by accident, but a query frame counts once per video, so its score cannot
+exceed the number of query frames.
 
 ## The suites
 
@@ -48,17 +55,15 @@ are found, as top-k does; Match sweeps a threshold, as the threshold suite does;
 compares pairs of videos directly, computed here from the frame embeddings instead of with HMA's
 compare endpoint. The metrics are mAP and precision/recall.
 
-- **Retrieval.** Every video is a query, and the other videos are ranked as above. The mAP@k
-  (mean average precision of the first k results; 1.0 is perfect) is averaged over the series and
-  reported on all series, the train half and the test half, at the default and at the selected
-  frame distance.
-- **Match.** A yes/no decision for every pair of videos: a candidate is called a match for a query when
-  its score reaches a score threshold, and a match is right when the two are of the same series.
-  Precision is the share of the matches called that are right, recall is the share of the right
-  matches that were called, and F1 is high only when both are. The score threshold is swept for the
-  precision/recall curve, at the default frame distance, and again at the selected distance for the
-  test queries only. This suite is where the frame distance changes the result, so it also picks
-  the distance (see above).
+- **Retrieval.** Every video is a query, and the videos it matches at the frame distance are ranked
+  as above. The mAP@k (mean average precision of the first k results; 1.0 is perfect) is averaged over
+  the series. A video of the same series that is not returned counts as missed.
+- **Match.** Looks at all the videos a query matches, before the list is cut to k. Precision is the share of
+  them that are of the query's series, recall is the share of the videos of the query's series that are among
+  them, and F1 is high only when both are. A folder with a single video is not a series, and its pairs are not
+  counted here or in Pairwise. The three numbers are reported at every frame distance from `VIDEO_DISTANCE_STEP` to `VIDEO_DISTANCE_MAX` (0.05, 0.10,
+  ... 0.30) and at `VIDEO_FRAME_DISTANCE`. HMA is asked once per frame, at the largest distance, and a smaller
+  distance uses the same result with the farther matches dropped.
 - **Pairwise.** A distance between two videos from their frame embeddings alone: the mean, over
   one video's frames, of the distance to the closest frame of the other, averaged over both
   directions. It needs no index or threshold, so it measures the embeddings. Its mAP, precision/recall
@@ -72,11 +77,8 @@ found, which counts against the result. In Pairwise it is as far from every vide
 
 | Output file (in the results folder) | Contents |
 |---|---|
-| `frame_distance_sweep_clip_float_results.csv` | the best F1, with its precision and recall, for each frame distance on the train and the test series |
-| `frame_distance_choice_clip_float_results.csv` | the default distance and the one selected on train, with their train and test F1 |
-| `retrieval_clip_float_results.csv` | mAP@1..`MAX_K` at the default and the selected distance, for all, train and test series |
-| `map_by_series_retrieval_clip_float_results.csv` | mAP@k per series at the selected distance |
-| `match_precision_recall_clip_float_results.csv`, `..._curve.png` | precision/recall over the score threshold, and the same at the chosen distance as `match_precision_recall_selected_...` |
+| `map_by_series_retrieval_clip_float_results.csv` | mAP@k at the frame distance, for each series and their mean, with k up to the size of the largest series |
+| `match_precision_recall_clip_float_results.csv`, `..._curve.png` | precision, recall and F1 at each frame distance |
 | `pairwise_clip_float_compare.csv` | the distance for every pair of videos with frames (paths anonymised unless `DEANONYMIZE_IMAGE_PATHS=1`) |
 | `map_by_series_pairwise_...`, `precision_recall_...`, `distance_distribution_...png` | the pairwise metrics |
 | `content_id_to_frame_clip_float.json` | which video and frame each bank item is |
@@ -85,14 +87,9 @@ found, which counts against the result. In Pairwise it is as far from every vide
 
 | Question | Read |
 |---|---|
-| How well are the videos of a series ranked first? | Retrieval mAP@k on the test series (about 0.96 on the series dataset) |
-| How well does a yes/no match decision work, and at which frame distance? | Match F1, precision and recall in `frame_distance_sweep` and `frame_distance_choice` |
+| Are the videos of a series returned, and ranked first? | Retrieval mAP@k |
+| How do wrong and missed matches change with the frame distance? | Match precision and recall |
 | How good are the embeddings alone, with no threshold? | Pairwise mAP and its distance distribution |
-
-On the series dataset the Retrieval mAP is close to its ceiling and changes little with the frame
-distance, because the closest frame already separates the series almost perfectly. It says little about
-the distance, which is why the Match F1 chooses it. A harder dataset, with look-alike videos in other
-series, would likely show more of a difference.
 
 ## Configuration
 
@@ -100,15 +97,13 @@ series, would likely show more of a difference.
 |---|---|---|
 | `VIDEO_INPUT_DIR` | Folder of series folders | `hma/video/resources/video-series-dataset/series` |
 | `BANK_NAME` | Bank to create in HMA | `VIDEO_TEST_BANK` (`VIDEO_SMOKE_TEST` for the smoke test) |
-| `VIDEO_FRAME_DISTANCE` | The default frame distance. 0.10 is HMA's own `clip_float` threshold | `0.10` |
-| `VIDEO_DISTANCE_MAX`, `VIDEO_DISTANCE_STEP` | The frame distances swept: step, 2 x step, ... up to the maximum | `0.30`, `0.05` |
-| `MAX_K` | Largest k of the mAP@k columns (at least 3) | `5` |
-| `VIDEO_TEST_FRACTION`, `VIDEO_SPLIT_SEED` | Share of the series held out, and the seed of the split | `0.5`, `0` |
+| `VIDEO_FRAME_DISTANCE` | The frame distance of the ranking. 0.10 is HMA's own `clip_float` threshold | `0.10` |
+| `VIDEO_DISTANCE_MAX`, `VIDEO_DISTANCE_STEP` | The frame distances the Match suite reports: step, 2 x step, ... up to the maximum | `0.30`, `0.05` |
 | `MAX_WORKERS` | Parallel lookups | `8` |
 
 The frame selection has its own variables, in [FRAME_SELECTION.md](FRAME_SELECTION.md).
 
-## Indexing and scoring
+## Indexing and matching
 
 [frame_index.py](../frame_index.py) connects the pipeline to HMA. HMA hashes the frames with its
 CLIP image signal (`clip_float`), and each kept frame is added to a bank as a precomputed hash,
@@ -116,24 +111,24 @@ one bank item per frame. The bank does not remember which video an item came fro
 `index_videos` returns a `VideoIndex` that does (and holds each video's frame embeddings).
 A video that cannot be read, or has no usable frame, is listed in `VideoIndex.unusable` and left out.
 
-A query video is scored against every other video: each of its frames is looked up, and a
-candidate's score is the share of the query's frames that matched at least one of the
-candidate's frames within a distance. The query's own video is never scored.
+`lookup_frames` looks up a query's frames and `rank_matches` ranks the videos they matched. The query's own
+video is left out with `exclude_video`.
 
 ```python
 from hma.hma_client import HMAClient
-from hma.video.frame_index import index_videos, lookup_frames, video_scores
+from hma.video.frame_index import index_videos, lookup_frames, rank_matches, wait_until_searchable
 
 client = HMAClient()
 client.setup_bank("VIDEOS")
 index = index_videos(client, "VIDEOS", ["a.mp4", "b.mp4", "c.mp4"])  # needs a running HMA
+wait_until_searchable(client, index)
 
 query = "a.mp4"
 matches = lookup_frames(client, index.embeddings[query], max_distance=0.3)
-for distance in (0.1, 0.2, 0.3):  # one lookup serves every smaller distance
-    print(distance, video_scores(matches, index.frames, distance, exclude_video=query))
+for distance in (0.1, 0.2, 0.3):  # one lookup serves every smaller one
+    print(distance, rank_matches(matches, index.frames, distance, exclude_video=query)[:3])  # the top 3
 ```
 
 HMA builds its search index in the background, and the index size it reports can be ahead of what
-lookups see. After `index_videos`, call `wait_until_searchable(client, index)` from the same module,
-which waits until a lookup finds the frame added last, before looking anything up.
+lookups see. `wait_until_searchable` waits until a lookup finds the frame added last, so call it after
+`index_videos` and before looking anything up.

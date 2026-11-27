@@ -4,7 +4,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from tqdm import tqdm
 from hma.image.tests.test_utils import get_image_files, hash_images_batch
 from hma.results_utils import write_results
-from hma.image.evaluate import Evaluator, get_logger, _log_info, _log_debug, _log_warning
+from hma.image.evaluate import Evaluator, _log_info, _log_debug, _log_warning
 
 def main():
     # Read signal_type from env (fresh each call)
@@ -12,8 +12,6 @@ def main():
     OUTPUT_FILE = os.getenv("OUTPUT_FILE", f"topk_test_{SIGNAL_TYPE}_results.csv")
     MAX_K = int(os.getenv("MAX_K", 5))
     
-    # Use existing logger if available, otherwise create a simple one
-    logger = get_logger()
     evaluator = Evaluator()
     image_files = get_image_files()
     k_values = range(1, MAX_K + 1)

@@ -1,4 +1,4 @@
-.PHONY: create-env activate-env smoke-test run-evaluation fetch-video-dataset video-smoke-test run-video-evaluation
+.PHONY: create-env activate-env lint unit-test smoke-test run-evaluation fetch-video-dataset video-smoke-test run-video-evaluation
 
 PYTHON ?= python3
 VENV_DIR ?= .venv
@@ -18,6 +18,19 @@ activate-env: create-env
 	@echo "Environment ready in $(VENV_DIR)."
 	@echo "To activate in your shell: source $(VENV_DIR)/bin/activate"
 	@echo "Or run commands via: $(PY) script.py"
+
+lint:
+	$(PYTHON) -m venv $(VENV_DIR)
+	$(PIP) install -q -r hma/requirements-dev.txt
+	$(VENV_DIR)/bin/ruff check .
+
+# The HMA and Sentinel suites share module names, so they run as separate pytest sessions.
+unit-test: activate-env
+	$(PIP) install -q -r hma/requirements-dev.txt -r sentinel/requirements-dev.txt
+	status=0; \
+	PYTHONPATH=. $(PY) -m pytest hma/unit_tests -v || status=$$?; \
+	PYTHONPATH=. $(PY) -m pytest sentinel/tests -v || status=$$?; \
+	exit $$status
 
 smoke-test: activate-env
 	@echo "Running smoke test locally against HMA at $(HMA_HOST):$(HMA_PORT)..."

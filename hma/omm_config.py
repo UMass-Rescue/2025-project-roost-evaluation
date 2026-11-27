@@ -11,8 +11,8 @@ import logging
 
 from OpenMediaMatch.storage.postgres.impl import DefaultOMMStore
 from OpenMediaMatch.utils.fetch_benchmarking import InfiniteRandomExchange
-from threatexchange.signal_type.pdq.signal import PdqSignal
-from threatexchange.signal_type.md5 import VideoMD5Signal
+from threatexchange.signal_type.pdq.signal import PdqSignal  # noqa: F401
+from threatexchange.signal_type.md5 import VideoMD5Signal  # noqa: F401
 from threatexchange.content_type.photo import PhotoContent
 from threatexchange.content_type.video import VideoContent
 from threatexchange.exchanges.impl.static_sample import StaticSampleSignalExchangeAPI
@@ -30,7 +30,7 @@ from threatexchange.exchanges.impl.fb_threatexchange_api import (
 
 # Import CLIP signal types from the extension
 try:
-    from tx_extension_clip import CLIPSignal, CLIPFloatSignal
+    from tx_extension_clip import CLIPSignal, CLIPFloatSignal  # noqa: F401
     CLIP_ENABLED = True
 except ImportError:
     CLIP_ENABLED = False

@@ -152,7 +152,7 @@ class HMAClient:
                     if isinstance(batch_results, list) and len(batch_results) == len(batch):
                         all_results.extend(batch_results)
                     else:
-                        _log_warning(f"Batch hash returned unexpected format, falling back to individual hashing")
+                        _log_warning("Batch hash returned unexpected format, falling back to individual hashing")
                         for fp in batch:
                             all_results.append(self.hash_local_content(fp))
                 else:

@@ -60,6 +60,14 @@ system-specific (see the linked docs above):
 - `EVAL_MODE`: `smoke` (default) or `test`
 - `OUTPUT_DIR`: root directory for all outputs (default: `./results`)
 
+## Continuous Integration
+
+GitHub Actions ([.github/workflows/ci.yml](.github/workflows/ci.yml)) runs on every
+pull request and on pushes to `main`: lint, the HMA and Sentinel unit tests, and a build
+of the `evaluation` image. Run the same checks locally with `make lint` and
+`make unit-test`. The HMA-backed smoke tests need the running stack, so they are not part
+of CI.
+
 ## Troubleshooting
 
 ```bash

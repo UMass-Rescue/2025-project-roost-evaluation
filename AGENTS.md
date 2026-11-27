@@ -13,16 +13,23 @@ This repo evaluates two independent systems against ground-truth datasets:
 
 ## Repo layout
 
-- `hma/` holds everything HMA-specific: `evaluate.py`, `metrics/`,
-  `resources/`, `tests/`, `series_labels_utils.py`, `omm_config.py`,
-  `Dockerfile.hma`, plus its own `GPU_SETUP.md` and
-  `EVALUATION_DESCRIPTION.md`.
+- `hma/` holds everything HMA-specific. Code shared by the HMA evaluations
+  sits at its root (`hma_client.py`, `logging_utils.py`, `results_utils.py`,
+  `path_id_store.py`, `series_labels_utils.py`, `metrics/`, `unit_tests/`), next to the HMA build
+  (`Dockerfile.hma`, `omm_config.py`, `resources/patches/`) and `GPU_SETUP.md`.
+  Each content type has its own folder: `hma/image/` holds `evaluate.py`,
+  `tests/`, `resources/`, `series_labels_utils.py` (the image file types over the shared logic)
+  and `docs/` (`TEST_COMMANDS.md`, `EVALUATION_DESCRIPTION.md`). `hma/video/` holds the
+  video evaluation (`evaluate.py`, `smoke_test.py`, the frame-selection pipeline, a `README.md`
+  and a `docs/` folder with `EVALUATION_DESCRIPTION.md` and `FRAME_SELECTION.md`); its dataset is
+  fetched into `hma/video/resources/`, never committed. Each content type keeps its detailed docs
+  in its own `docs/` folder.
 - `sentinel/` holds the equivalent shape for the **Sentinel** domain.
 - Root-level files (`README.md`, `docker-compose.yaml`, `Dockerfile`,
   `requirements.txt`, `Makefile`) are shared across both domains —
   `Dockerfile`/`requirements.txt` build the single `evaluation` image both
-  `hma/evaluate.py` and `sentinel/evaluate.py` run in.
-- `hma/TEST_COMMANDS.md` and `sentinel/README.md` hold each domain's own
+  `hma/image/evaluate.py` and `sentinel/evaluate.py` run in.
+- `hma/image/docs/TEST_COMMANDS.md` and `sentinel/README.md` hold each domain's own
   exhaustive command reference; the root `README.md` only covers shared
   setup/cleanup.
 
@@ -39,10 +46,12 @@ docker compose run --rm -e BANK_NAME=SMOKE_TEST evaluation   # smoke test
 docker compose run --rm -e EVAL_MODE=test evaluation         # full test suite
 make smoke-test       # local equivalent, against localhost
 make run-evaluation    # local equivalent, full suite
+make video-smoke-test  # video evaluation smoke test (generated sample clips)
+make fetch-video-dataset && make run-video-evaluation   # full video evaluation
 ```
 
-See `hma/TEST_COMMANDS.md`, `sentinel/README.md`, `hma/EVALUATION_DESCRIPTION.md`,
-and `hma/GPU_SETUP.md` for full detail — don't duplicate that detail here.
+See `hma/image/docs/TEST_COMMANDS.md`, `hma/video/README.md`, `sentinel/README.md`,
+`hma/image/docs/EVALUATION_DESCRIPTION.md`, and `hma/GPU_SETUP.md` for full detail — don't duplicate that detail here.
 
 ## Code conventions
 
@@ -75,9 +84,11 @@ and `hma/GPU_SETUP.md` for full detail — don't duplicate that detail here.
 ## Further reading
 
 - `README.md` — shared setup/cleanup; links out to the two systems below
-- `hma/README.md` / `hma/TEST_COMMANDS.md` — HMA setup, configuration, and
+- `hma/README.md` / `hma/image/docs/TEST_COMMANDS.md` — HMA setup, configuration, and
   exhaustive command reference
-- `hma/EVALUATION_DESCRIPTION.md` — what each HMA test suite actually measures
+- `hma/image/docs/EVALUATION_DESCRIPTION.md` — what each HMA test suite actually measures
+- `hma/video/README.md` — video evaluation quick start; `hma/video/docs/EVALUATION_DESCRIPTION.md`
+  and `hma/video/docs/FRAME_SELECTION.md` hold what it measures and how frames are chosen
 - `hma/GPU_SETUP.md` — GPU acceleration setup
 - `sentinel/README.md` — Sentinel service wiring, evaluation code layout, and
   command reference

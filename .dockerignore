@@ -1,0 +1,3 @@
+# The series dataset is fetched into the repo and is far too large for the image; the evaluation
+# container sees it through the compose mount instead. See hma/video/README.md.
+hma/video/resources/video-series-dataset/

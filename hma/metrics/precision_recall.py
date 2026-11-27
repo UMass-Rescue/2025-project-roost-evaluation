@@ -15,11 +15,11 @@ except ImportError:
 from hma.metrics.common import load_and_validate_data, ensure_output_dir, classify_pairwise_by_series
 
 
-def _sweep_thresholds(
+def sweep_thresholds(
     labeled_distances: List[Tuple[float, bool]], thresholds: List[float]
 ) -> List[dict]:
     """
-    Compute precision/recall/FPR at each distance threshold.
+    Compute precision/recall/F1/FPR at each distance threshold.
     """
     results: List[dict] = []
     total_pos = sum(1 for _, is_pos in labeled_distances if is_pos)
@@ -38,6 +38,7 @@ def _sweep_thresholds(
 
         precision = tp / (tp + fp) if (tp + fp) else 0.0
         recall = tp / (tp + fn) if (tp + fn) else 0.0
+        f1 = 2 * tp / (2 * tp + fp + fn) if tp else 0.0
         fpr = fp / (fp + tn) if (fp + tn) else 0.0
 
         results.append(
@@ -48,6 +49,7 @@ def _sweep_thresholds(
                 "fn": fn,
                 "precision": precision,
                 "recall": recall,
+                "f1": f1,
                 "fpr": fpr,
             }
         )
@@ -90,7 +92,7 @@ def _write_csv(rows: List[dict], output_csv: str) -> None:
             )
 
 
-def _plot_pr(rows: List[dict], output_plot: str, signal_type: str) -> None:
+def plot_pr(rows: List[dict], output_plot: str, signal_type: str) -> None:
     if not MATPLOTLIB_AVAILABLE or not rows:
         return
     
@@ -124,6 +126,24 @@ def _plot_pr(rows: List[dict], output_plot: str, signal_type: str) -> None:
     plt.close()
 
 
+def compute_precision_recall_from_labeled(
+    labeled: List[Tuple[float, bool]],
+    output_csv: str,
+    output_plot: Optional[str] = None,
+    signal_type: str = "",
+) -> None:
+    """
+    Sweep a distance threshold over (distance, is_same_series) pairs and write
+    precision/recall/FPR to CSV (and a curve to output_plot, if given).
+    Distances are "smaller is more similar".
+    """
+    thresholds = _auto_thresholds(labeled)
+    rows = sweep_thresholds(labeled, thresholds)
+    _write_csv(rows, output_csv)
+    if output_plot:
+        plot_pr(rows, output_plot, signal_type)
+
+
 def compute_precision_recall_from_pairwise(
     labels_path: str,
     pairwise_path: str,
@@ -136,11 +156,7 @@ def compute_precision_recall_from_pairwise(
         labels_path, pairwise_path, anon_map_path
     )
     labeled = classify_pairwise_by_series(series_to_images, entries, id_to_path)
-    thresholds = _auto_thresholds(labeled)
-    rows = _sweep_thresholds(labeled, thresholds)
-    _write_csv(rows, output_csv)
-    if output_plot:
-        _plot_pr(rows, output_plot, signal_type)
+    compute_precision_recall_from_labeled(labeled, output_csv, output_plot, signal_type)
 
 
 def main():

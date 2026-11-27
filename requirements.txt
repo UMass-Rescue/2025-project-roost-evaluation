@@ -4,5 +4,8 @@ numpy>=1.26.0
 scipy>=1.11.0
 psycopg2-binary>=2.9.9
 matplotlib>=3.7.0
-
-
+# Below 4.13: PySceneDetect 0.7.3 crashes (NaN video position at end of stream) on OpenCV 4.14 and 5.0; 4.12 is fine
+opencv-python-headless>=4.10,<4.13
+# PySceneDetect's own dependencies. PySceneDetect is installed separately, see requirements-scenedetect.txt
+click>=8.0,!=8.3.0
+platformdirs>=4.0

@@ -1,6 +1,6 @@
 # HMA Test Commands Reference
 
-Run `docker compose up --build -d` first (see root [README.md](../README.md)'s Quick Start section).
+Run `docker compose up --build -d` first (see root [README.md](../../README.md)'s Quick Start section).
 
 ## Run Tests
 
@@ -29,16 +29,16 @@ docker compose run --rm -e EVAL_MODE=test -e SIGNAL_TYPE=clip_float evaluation
 ### Individual Tests
 ```bash
 # Pairwise test (specify signal type)
-docker compose run --rm -e SIGNAL_TYPE=clip evaluation python hma/tests/pairwise_test.py
-docker compose run --rm -e SIGNAL_TYPE=clip_float evaluation python hma/tests/pairwise_test.py
+docker compose run --rm -e SIGNAL_TYPE=clip evaluation python hma/image/tests/pairwise_test.py
+docker compose run --rm -e SIGNAL_TYPE=clip_float evaluation python hma/image/tests/pairwise_test.py
 
 # Top-k test
-docker compose run --rm -e SIGNAL_TYPE=clip -e MAX_K=5 evaluation python hma/tests/topk_test.py
-docker compose run --rm -e SIGNAL_TYPE=clip_float -e MAX_K=5 evaluation python hma/tests/topk_test.py
+docker compose run --rm -e SIGNAL_TYPE=clip -e MAX_K=5 evaluation python hma/image/tests/topk_test.py
+docker compose run --rm -e SIGNAL_TYPE=clip_float -e MAX_K=5 evaluation python hma/image/tests/topk_test.py
 
 # Threshold test
-docker compose run --rm -e SIGNAL_TYPE=clip -e THRESHOLD_MAX=50 -e THRESHOLD_STEP=10 evaluation python hma/tests/threshold_test.py
-docker compose run --rm -e SIGNAL_TYPE=clip_float -e THRESHOLD_MAX=1.0 -e THRESHOLD_STEP=0.2 evaluation python hma/tests/threshold_test.py
+docker compose run --rm -e SIGNAL_TYPE=clip -e THRESHOLD_MAX=50 -e THRESHOLD_STEP=10 evaluation python hma/image/tests/threshold_test.py
+docker compose run --rm -e SIGNAL_TYPE=clip_float -e THRESHOLD_MAX=1.0 -e THRESHOLD_STEP=0.2 evaluation python hma/image/tests/threshold_test.py
 ```
 
 ### Custom Parameters
@@ -95,7 +95,7 @@ cat evaluations_results/<timestamp>/pairwise_clip_float_compare.json | head -50
 
 ## Performance Metrics & Graphs
 
-After tests complete, `hma/evaluate.py` automatically generates performance metrics and visualizations:
+After tests complete, `hma/image/evaluate.py` automatically generates performance metrics and visualizations:
 
 ### Outputs Generated
 
@@ -128,7 +128,7 @@ open evaluations_results/<timestamp>/distance_distribution_clip.png
 **MAP:**
 ```bash
 PYTHONPATH=. python hma/metrics/map.py \
-  --labels hma/resources/labels/images_series_labels.json \
+  --labels hma/image/resources/labels/images_series_labels.json \
   --pairwise evaluations_results/<timestamp>/pairwise_clip_compare.json \
   --output_csv custom_map_results.csv
 ```
@@ -136,7 +136,7 @@ PYTHONPATH=. python hma/metrics/map.py \
 **Classification Precision-Recall (threshold sweep):**
 ```bash
 PYTHONPATH=. python hma/metrics/precision_recall.py \
-  --labels hma/resources/labels/images_series_labels.json \
+  --labels hma/image/resources/labels/images_series_labels.json \
   --pairwise evaluations_results/<timestamp>/pairwise_clip_compare.json \
   --output_csv precision_recall_results.csv \
   --output_plot precision_recall_curve.png
@@ -145,7 +145,7 @@ PYTHONPATH=. python hma/metrics/precision_recall.py \
 **Distance distribution:**
 ```bash
 PYTHONPATH=. python hma/metrics/distance_distribution.py \
-  --labels hma/resources/labels/images_series_labels.json \
+  --labels hma/image/resources/labels/images_series_labels.json \
   --pairwise evaluations_results/<timestamp>/pairwise_clip_compare.json \
   --output_plot distance_distribution.png \
   --signal_type clip

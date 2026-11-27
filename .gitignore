@@ -2,7 +2,7 @@ test_run_logs/
 evaluations_results/
 results/*
 __pycache__/*
-hma/tests/__pycache__/*
+hma/image/tests/__pycache__/*
 .vscode/*
 .venv/*
 .env
@@ -10,3 +10,6 @@ hma/tests/__pycache__/*
 # Private/sensitive datasets (e.g. the grooming-conversations dataset) are
 # never committed to this repo. See sentinel/README.md.
 sentinel/dataset/
+
+# The video series dataset is fetched, not committed. See hma/video/README.md.
+hma/video/resources/video-series-dataset/

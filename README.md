@@ -6,7 +6,8 @@ This repo evaluates two independent systems against ground-truth datasets:
 
 - **[HMA](hma/README.md)** (Hasher-Matcher-Actioner) — image-hash matching
   (PDQ, CLIP, CLIP-float signals) from Facebook's ThreatExchange repository,
-  via a dockerized OpenMediaMatch service.
+  via a dockerized OpenMediaMatch service, and video matching built on the
+  same service by hashing representative frames of each video.
 - **[Sentinel](sentinel/README.md)** — a rare-class affinity detector for text,
   evaluated here on a grooming-conversation dataset, via its own dockerized
   API service.
@@ -45,8 +46,9 @@ This builds and starts, for both systems:
 
 ### 3. Run an Evaluation
 
-- **HMA**: see [hma/README.md](hma/README.md) and [hma/TEST_COMMANDS.md](hma/TEST_COMMANDS.md)
-  for test commands, metrics, and configuration.
+- **HMA**: see [hma/README.md](hma/README.md) and [hma/image/docs/TEST_COMMANDS.md](hma/image/docs/TEST_COMMANDS.md)
+  for test commands, metrics, and configuration. For video, see
+  [hma/video/README.md](hma/video/README.md).
 - **Sentinel**: see [sentinel/README.md](sentinel/README.md) for test commands,
   dataset setup, and configuration.
 

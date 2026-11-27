@@ -174,6 +174,25 @@ def write_series_map_csv(
             writer.writerow(avg_row)
 
 
+def compute_map_from_rankings(
+    series_to_images: Dict[str, Set[str]],
+    rankings: Dict[str, List[Tuple[str, float]]],
+    output_csv: str,
+) -> Dict[str, List[float]]:
+    """
+    Compute mAP@k from per-query rankings, write it to CSV and return it per series.
+
+    rankings maps each query path to its neighbors as (path, value) tuples, best
+    first; only the order matters, so the value may be a distance or a score. Paths
+    must be normalized the same way as the labels' paths (see
+    common.normalize_pairwise_path). A query's own entry is ignored.
+    """
+    max_k = max(len(v) for v in series_to_images.values())
+    series_to_map = compute_series_map(series_to_images, rankings, max_k)
+    write_series_map_csv(series_to_map, output_csv)
+    return series_to_map
+
+
 def compute_map_from_pairwise(
     labels_path: str, 
     pairwise_path: str, 
@@ -186,10 +205,7 @@ def compute_map_from_pairwise(
     )
     
     rankings = build_rankings(entries, id_to_path)
-    max_k = max(len(v) for v in series_to_images.values())
-    series_to_map = compute_series_map(series_to_images, rankings, max_k)
-    
-    write_series_map_csv(series_to_map, output_csv)
+    compute_map_from_rankings(series_to_images, rankings, output_csv)
 
 
 def compute_map_from_retrieval_csv(
@@ -246,12 +262,7 @@ def compute_map_from_retrieval_csv(
         if ranked_neighbors:
             rankings[query_normalized] = ranked_neighbors
     
-    # Compute MAP@k for each series
-    max_k = max(len(v) for v in series_to_images.values())
-    series_to_map = compute_series_map(series_to_images, rankings, max_k)
-    
-    # Write results
-    write_series_map_csv(series_to_map, output_csv)
+    compute_map_from_rankings(series_to_images, rankings, output_csv)
 
 
 def main():
